@@ -25,8 +25,8 @@ clean:
 
 flash: build
 	@echo "Waiting for Raspberry Pi Pico in BOOTSEL mode..."
-	while [ ! -d "$(PICO_DRIVE)" ]; do \
-		sleep 1; \
+	@while [ ! -d "$(PICO_DRIVE)" ]; do \
+		sleep 1 > /dev/null 2>&1;\
 	done
 	@echo "Pico detected. Flashing..."
 	cp $(UF2_FILE) $(PICO_DRIVE)
