@@ -15,12 +15,14 @@ pico_sdk_init()
 add_executable(main
     main.c
     ws2812_pio/ws2812.c
+    stairway/stairway_leds.c
 )
 
 pico_generate_pio_header(main ${CMAKE_CURRENT_LIST_DIR}/ws2812_pio/ws2812.pio)
 
 target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/ws2812_pio
+    ${CMAKE_CURRENT_LIST_DIR}/stairway
     ${CMAKE_CURRENT_LIST_DIR}/
 )
 
@@ -30,6 +32,7 @@ target_link_libraries(
     pico_cyw43_arch_none
     hardware_pio
     hardware_clocks
+    pico_time
 )
 
 # enable usb output, disable uart output

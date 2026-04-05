@@ -1,29 +1,46 @@
 #include "global.h"
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+#include "pico/time.h"
 #include "api/ws2812_pio_api.h"
+#include "api/stairway_leds.h"
 
-#define WS281x_PIN 2
+static inline uint32_t get_time_us(void) {
+    return to_us_since_boot(get_absolute_time());
+}
+static inline uint32_t get_time_ms(void) {
+    return to_ms_since_boot(get_absolute_time());
+}
+
+#define WS281x_PIN 3
 #define WS281x_N   18
 
 int main() {
+    uint32_t dt = 0;
+    uint32_t rdt = 0;
     uint8_t cnt = 0;
+    bool dir = false;
     stdio_init_all();
     if (cyw43_arch_init()) {
         return -1;
     }
 
-    Ws2812_Header led_header = {0};
-    ws2812_init(WS281x_PIN, WS281x_N, &led_header);
-    ws2812_clear(&led_header);
+    stairway_leds_init(WS281x_PIN, WS281x_N);
 
-    while (true) {
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, cnt & 1);
-        ws2812_set_color(&led_header, cnt % led_header.led_count, 255 - cnt, cnt / 2, cnt);
-        ws2812_refresh(&led_header);
-        printf("Hello, world!\n");
-        cnt++;
-        sleep_ms(100);
+    while (1) {
+        if (get_time_ms() - dt > 200) {
+            dt = get_time_ms();
+            if (cnt < WS281x_N) {
+                stairway_leds_set_state(cnt, !dir);
+                cnt++;
+            } else {
+                dir = !dir;
+                cnt = 0;
+            }
+        }
+
+        stairway_leds_refresh();
+        sleep_ms(20);
     }
     return 0;
 }
