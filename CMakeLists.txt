@@ -16,6 +16,8 @@ add_executable(main
     main.c
     ws2812_pio/ws2812.c
     stairway/stairway_leds.c
+    stairway/stairway_sensors.c
+    modbus_master/modbus_master.c
 )
 
 pico_generate_pio_header(main ${CMAKE_CURRENT_LIST_DIR}/ws2812_pio/ws2812.pio)
@@ -23,6 +25,7 @@ pico_generate_pio_header(main ${CMAKE_CURRENT_LIST_DIR}/ws2812_pio/ws2812.pio)
 target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/ws2812_pio
     ${CMAKE_CURRENT_LIST_DIR}/stairway
+    ${CMAKE_CURRENT_LIST_DIR}/modbus_master
     ${CMAKE_CURRENT_LIST_DIR}/
 )
 
@@ -32,6 +35,7 @@ target_link_libraries(
     pico_cyw43_arch_none
     hardware_pio
     hardware_clocks
+    hardware_uart
     pico_time
 )
 

@@ -13,6 +13,9 @@ typedef enum {
     ERR_NEED_INIT = 0x80000005,
     ERR_OPEN_FILE = 0x80000006,
     ERR_MEM_ALLOC_FAIL = 0x80000007,
+    ERR_OVERFLOW = 0x80000008,
+    ERR_EMPTY = 0x80000009,
+    ERR_BUSY = 0x8000000A,
 } ErrCode;
 
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
@@ -30,7 +33,9 @@ typedef enum {
 
 #define RETURN_IF_COND(cond, err)                                                                                      \
     if (cond) {                                                                                                        \
-        printf("%s %d ErrCode: 0x%x\n", FILE_ID, __LINE__, err);                                                       \
+        if (err != ERR_SUCCESS) {                                                                                      \
+            printf("%s %d ErrCode: 0x%x\n", FILE_ID, __LINE__, err);                                                   \
+        }                                                                                                              \
         return err;                                                                                                    \
     }
 
@@ -62,3 +67,11 @@ typedef enum {
         err = err_code;                                                                                                \
         goto EXIT;                                                                                                     \
     }
+
+#define LOG_IF_ERROR(err)                                                                                              \
+    if (err != ERR_SUCCESS) {                                                                                          \
+        printf("%s %d ErrCode: 0x%x\n", FILE_ID, __LINE__, err);                                                       \
+    }
+
+uint32_t get_time_us(void);
+uint32_t get_time_ms(void);

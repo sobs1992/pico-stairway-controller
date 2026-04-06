@@ -31,3 +31,7 @@ flash: build
 	@echo "Pico detected. Flashing..."
 	cp $(UF2_FILE) $(PICO_DRIVE)
 	@echo "Done!"
+
+run: flash
+	sleep 1
+	putty -serial /dev/ttyACM0 -sercfg 115200

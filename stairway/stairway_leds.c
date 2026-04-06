@@ -6,14 +6,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define LED_ON           250
-#define LED_OFF          0
-#define LED_ON_STEP_CNT  10
-#define LED_OFF_STEP_CNT 10
+#define EMERGENCY_UP_CNT   2
+#define EMERGENCY_DOWN_CNT 2
+#define LED_ON             250
+#define LED_OFF            0
+#define LED_ON_STEP_CNT    10
+#define LED_OFF_STEP_CNT   10
 
 typedef struct {
     uint8_t led_value;
     bool state;
+    uint32_t ts;
 } LedState;
 
 static Ws2812_Header ws2812_handler = {0};
@@ -61,11 +64,28 @@ ErrCode stairway_leds_deinit(void) {
     return err;
 }
 
-ErrCode stairway_leds_set_state(uint32_t index, bool state) {
+static bool emergency_up_state = false;
+static bool emergency_down_state = false;
+
+static bool emergency_state[EMERGENCY_MAX] = {false};
+
+ErrCode stairway_emergency_leds(EmergencyType type, bool state) {
+    ErrCode err = ERR_SUCCESS;
+
+    RETURN_IF_COND(type >= EMERGENCY_MAX, ERR_PARAM_INVALID);
+    emergency_state[type] = state;
+
+    return err;
+}
+
+ErrCode stairway_leds_set_state(uint32_t index, bool state, uint32_t event_ts) {
     ErrCode err = ERR_SUCCESS;
     RETURN_IF_COND(index >= ws2812_handler.led_count, ERR_PARAM_INVALID);
 
-    buf[index].state = state;
+    if (buf[index].ts < event_ts) {
+        buf[index].state = state;
+        buf[index].ts = event_ts;
+    }
 
     return err;
 }
@@ -74,15 +94,16 @@ ErrCode stairway_leds_refresh(void) {
     ErrCode err = ERR_SUCCESS;
 
     for (uint32_t i = 0; i < ws2812_handler.led_count; i++) {
-        if ((buf[i].state) && (buf[i].led_value < LED_ON)) {
+        if (((buf[i].state) && (buf[i].led_value < LED_ON)) ||
+            ((emergency_state[EMERGENCY_UP]) && (i < EMERGENCY_UP_CNT)) ||
+            ((emergency_state[EMERGENCY_DOWN]) && (i > ws2812_handler.led_count - EMERGENCY_UP_CNT - 1))) {
             int16_t temp = (int16_t)buf[i].led_value + led_on_step;
             if (temp > LED_ON) {
                 buf[i].led_value = LED_ON;
             } else {
                 buf[i].led_value = temp;
             }
-        }
-        if ((!buf[i].state) && (buf[i].led_value > LED_OFF)) {
+        } else if ((!buf[i].state) && (buf[i].led_value > LED_OFF)) {
             int16_t temp = (int16_t)buf[i].led_value - led_off_step;
             if (temp < LED_OFF) {
                 buf[i].led_value = LED_OFF;
