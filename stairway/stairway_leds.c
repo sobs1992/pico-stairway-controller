@@ -24,6 +24,10 @@ static LedState *buf = {NULL};
 static uint8_t led_on_step = 1;
 static uint8_t led_off_step = 1;
 
+static bool emergency_up_state = false;
+static bool emergency_down_state = false;
+static bool emergency_state[EMERGENCY_MAX] = {false};
+
 ErrCode stairway_leds_init(uint32_t pin, uint32_t led_n) {
     ErrCode err = ERR_SUCCESS;
 
@@ -64,11 +68,6 @@ ErrCode stairway_leds_deinit(void) {
     return err;
 }
 
-static bool emergency_up_state = false;
-static bool emergency_down_state = false;
-
-static bool emergency_state[EMERGENCY_MAX] = {false};
-
 ErrCode stairway_emergency_leds(EmergencyType type, bool state) {
     ErrCode err = ERR_SUCCESS;
 
@@ -92,6 +91,7 @@ ErrCode stairway_leds_set_state(uint32_t index, bool state, uint32_t event_ts) {
 
 ErrCode stairway_leds_refresh(void) {
     ErrCode err = ERR_SUCCESS;
+    bool leds_updated = false;
 
     for (uint32_t i = 0; i < ws2812_handler.led_count; i++) {
         if (((buf[i].state) && (buf[i].led_value < LED_ON)) ||
@@ -103,6 +103,7 @@ ErrCode stairway_leds_refresh(void) {
             } else {
                 buf[i].led_value = temp;
             }
+            leds_updated = true;
         } else if ((!buf[i].state) && (buf[i].led_value > LED_OFF)) {
             int16_t temp = (int16_t)buf[i].led_value - led_off_step;
             if (temp < LED_OFF) {
@@ -110,11 +111,14 @@ ErrCode stairway_leds_refresh(void) {
             } else {
                 buf[i].led_value = temp;
             }
+            leds_updated = true;
         }
         RETURN_IF_ERROR(ws2812_set_color(&ws2812_handler, i, buf[i].led_value, buf[i].led_value, buf[i].led_value));
     }
 
-    RETURN_IF_ERROR(ws2812_refresh(&ws2812_handler));
+    if (leds_updated) {
+        RETURN_IF_ERROR(ws2812_refresh(&ws2812_handler));
+    }
 
     return err;
 }

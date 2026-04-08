@@ -9,7 +9,7 @@ typedef enum {
     STAIRWAY_SENS_DOWN_FIRST,
     STAIRWAY_SENS_DOWN_SECOND,
     STAIRWAY_SENS_MAX,
-} StaiwaySensorType;
+} StairwaySensorType;
 
 typedef struct {
     uint16_t trigger_value[STAIRWAY_SENS_MAX];

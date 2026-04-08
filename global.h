@@ -18,11 +18,29 @@ typedef enum {
     ERR_BUSY = 0x8000000A,
 } ErrCode;
 
+#define INFO(...)                                                                                                      \
+    do {                                                                                                               \
+        printf("[%08d] ", get_time_ms());                                                                              \
+        printf(__VA_ARGS__);                                                                                           \
+        printf("\n");                                                                                                  \
+    } while (0);
+
+#define ANTISPAM_BEGIN(ms)                                                                                             \
+    {                                                                                                                  \
+        static uint32_t _antispam_prev_ts = 0;                                                                         \
+        uint32_t _antispam_ts = get_time_ms();                                                                         \
+        if ((_antispam_ts - _antispam_prev_ts) > ms) {                                                                 \
+            _antispam_prev_ts = _antispam_ts;
+
+#define ANTISPAM_END                                                                                                   \
+    }                                                                                                                  \
+    }
+
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
 
 #define RETURN_IF_ERROR(err)                                                                                           \
     if (err != ERR_SUCCESS) {                                                                                          \
-        printf("%s %d ErrCode: 0x%x\n", FILE_ID, __LINE__, err);                                                       \
+        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
         return err;                                                                                                    \
     }
 
@@ -34,7 +52,7 @@ typedef enum {
 #define RETURN_IF_COND(cond, err)                                                                                      \
     if (cond) {                                                                                                        \
         if (err != ERR_SUCCESS) {                                                                                      \
-            printf("%s %d ErrCode: 0x%x\n", FILE_ID, __LINE__, err);                                                   \
+            INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                       \
         }                                                                                                              \
         return err;                                                                                                    \
     }
@@ -46,7 +64,7 @@ typedef enum {
 
 #define TO_EXIT_IF_ERROR(err)                                                                                          \
     if (err != ERR_SUCCESS) {                                                                                          \
-        printf("%s %d ErrCode: 0x%x\n", FILE_ID, __LINE__, err);                                                       \
+        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
         goto EXIT;                                                                                                     \
     }
 
@@ -57,7 +75,7 @@ typedef enum {
 
 #define TO_EXIT_IF_COND(cond, err_code)                                                                                \
     if (cond) {                                                                                                        \
-        printf("%s %d ErrCode: 0x%x\n", FILE_ID, __LINE__, err_code);                                                  \
+        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err_code);                                                      \
         err = err_code;                                                                                                \
         goto EXIT;                                                                                                     \
     }
@@ -70,7 +88,7 @@ typedef enum {
 
 #define LOG_IF_ERROR(err)                                                                                              \
     if (err != ERR_SUCCESS) {                                                                                          \
-        printf("%s %d ErrCode: 0x%x\n", FILE_ID, __LINE__, err);                                                       \
+        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
     }
 
 uint32_t get_time_us(void);
