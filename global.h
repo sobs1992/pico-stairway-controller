@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include "main.h"
 
 typedef enum {
     ERR_SUCCESS = 0,
@@ -90,6 +91,3 @@ typedef enum {
     if (err != ERR_SUCCESS) {                                                                                          \
         INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
     }
-
-uint32_t get_time_us(void);
-uint32_t get_time_ms(void);

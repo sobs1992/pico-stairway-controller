@@ -9,6 +9,8 @@
 
 #define PRINT_COMMUNICATION 0
 
+#define LED_PIN 12
+
 #define SEND_BUF_SIZE    32
 #define RECEIVE_BUF_SIZE 256
 
@@ -105,6 +107,8 @@ ErrCode modbus_master_init(void) {
     gpio_init(MODBUS_MASTER_DIR_PIN);
     gpio_set_dir(MODBUS_MASTER_DIR_PIN, true);
     gpio_put(MODBUS_MASTER_DIR_PIN, 0);
+    gpio_init(LED_PIN);
+    gpio_set_dir(LED_PIN, true);
 
     uart_set_fifo_enabled(MODBUS_MASTER_UART, false);
 
@@ -174,6 +178,8 @@ ErrCode modbus_master_send(const ModbusMasterRequest *request) {
     printf("\n");
 #endif
 
+    gpio_put(LED_PIN, 1);
+
     receive_counter = 0;
     memset(receive_buf, 0, sizeof(receive_buf));
 
@@ -201,12 +207,14 @@ ErrCode modbus_master_routine(void) {
         //    printf("DT: %d\n", dt);
         decode_modbus(receive_buf, receive_counter);
         busy = false;
+        gpio_put(LED_PIN, 0);
     } else if (dt > last_request.timeout) {
         //    printf("TIMEOUT (%d > %d)\n", dt, last_request.timeout);
         if (last_request.cb) {
             last_request.cb(MODBUS_ERR_TIMEOUT, NULL, 0, NULL, 0);
         }
         busy = false;
+        gpio_put(LED_PIN, 0);
     }
     return err;
 }

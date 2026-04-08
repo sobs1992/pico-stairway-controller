@@ -2,26 +2,25 @@
 
 #include "global.h"
 #include "hardware/adc.h"
+#include "api/settings_api.h"
 
 #define FILTER_N 32
 
 static const uint8_t adc_gpio[] = {[0] = 26, [1] = 27, [2] = 28, [3] = 29, [4] = 4};
 static int32_t filtered_adc = INT32_MAX;
-static uint32_t hist_off = 0;
-static uint32_t hist_on = 0;
 static bool trigger = false;
+static Settings *settings = NULL;
 
-ErrCode light_sensor_init(uint32_t pin, uint32_t off_voltage, uint32_t on_voltage) {
+ErrCode light_sensor_init(uint32_t pin) {
     ErrCode err = ERR_SUCCESS;
 
     RETURN_IF_COND(pin >= ARRAY_SIZE(adc_gpio), ERR_PARAM_INVALID);
 
+    settings = settings_get();
+
     adc_init();
     adc_gpio_init(adc_gpio[pin]);
     adc_select_input(pin);
-
-    hist_off = off_voltage;
-    hist_on = on_voltage;
 
     return err;
 }
@@ -37,9 +36,9 @@ ErrCode light_sensor_get_data(bool *state, uint32_t *raw) {
     }
 
     uint32_t voltage = 3300 * filtered_adc / (1 << 12);
-    if (voltage > hist_on) {
+    if (voltage > settings->light_sensor_day_value) {
         trigger = true;
-    } else if (voltage < hist_off) {
+    } else if (voltage < settings->light_sensor_night_value) {
         trigger = false;
     }
 

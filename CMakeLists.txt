@@ -4,6 +4,8 @@ if(NOT DEFINED ENV{PICO_SDK_PATH})
     message(FATAL_ERROR "Please create environment variable PICO_SDK_PATH and specify path to pico_sdk.")
 endif()
 
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+
 # initialize the SDK directly
 include($ENV{PICO_SDK_PATH}/pico_sdk_init.cmake)
 
@@ -19,6 +21,9 @@ add_executable(main
     stairway/stairway_sensors.c
     modbus_master/modbus_master.c
     light_sensor/light_sensor.c
+    settings/settings.c
+    commands/commands.c
+    cli/cli.c
 )
 
 pico_generate_pio_header(main ${CMAKE_CURRENT_LIST_DIR}/ws2812_pio/ws2812.pio)
@@ -28,6 +33,9 @@ target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/stairway
     ${CMAKE_CURRENT_LIST_DIR}/modbus_master
     ${CMAKE_CURRENT_LIST_DIR}/light_sensor
+    ${CMAKE_CURRENT_LIST_DIR}/settings
+    ${CMAKE_CURRENT_LIST_DIR}/commands
+    ${CMAKE_CURRENT_LIST_DIR}/cli
     ${CMAKE_CURRENT_LIST_DIR}/
 )
 
@@ -39,6 +47,7 @@ target_link_libraries(
     hardware_clocks
     hardware_uart
     hardware_adc
+    hardware_watchdog
     pico_time
 )
 

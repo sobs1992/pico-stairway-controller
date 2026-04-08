@@ -3,15 +3,9 @@
 #include "global.h"
 #include "api/stairway_leds.h"
 #include "api/ws2812_pio_api.h"
+#include "api/settings_api.h"
 #include <stdlib.h>
 #include <string.h>
-
-#define EMERGENCY_UP_CNT   2
-#define EMERGENCY_DOWN_CNT 2
-#define LED_ON             250
-#define LED_OFF            0
-#define LED_ON_STEP_CNT    10
-#define LED_OFF_STEP_CNT   10
 
 typedef struct {
     uint8_t led_value;
@@ -21,30 +15,19 @@ typedef struct {
 
 static Ws2812_Header ws2812_handler = {0};
 static LedState *buf = {NULL};
-static uint8_t led_on_step = 1;
-static uint8_t led_off_step = 1;
-
 static bool emergency_up_state = false;
 static bool emergency_down_state = false;
 static bool emergency_state[EMERGENCY_MAX] = {false};
+static Settings *settings = NULL;
 
-ErrCode stairway_leds_init(uint32_t pin, uint32_t led_n) {
+ErrCode stairway_leds_init(uint32_t pin) {
     ErrCode err = ERR_SUCCESS;
 
-    RETURN_IF_COND(led_n == 0, ERR_PARAM_INVALID);
-    RETURN_IF_ERROR(ws2812_init(pin, led_n, &ws2812_handler));
-    buf = malloc(sizeof(LedState) * led_n);
+    settings = settings_get();
+    RETURN_IF_ERROR(ws2812_init(pin, settings->led_count, &ws2812_handler));
+    buf = malloc(sizeof(LedState) * settings->led_count);
     TO_EXIT_IF_COND(buf == NULL, ERR_MEM_ALLOC_FAIL);
-    memset(buf, 0, sizeof(LedState) * led_n);
-
-    led_on_step = ((LED_ON - LED_OFF) / LED_ON_STEP_CNT);
-    led_off_step = ((LED_ON - LED_OFF) / LED_OFF_STEP_CNT);
-    if (led_on_step == 0) {
-        led_on_step = 1;
-    }
-    if (led_off_step == 0) {
-        led_off_step = 1;
-    }
+    memset(buf, 0, sizeof(LedState) * settings->led_count);
 
     return err;
 EXIT:
@@ -94,20 +77,21 @@ ErrCode stairway_leds_refresh(void) {
     bool leds_updated = false;
 
     for (uint32_t i = 0; i < ws2812_handler.led_count; i++) {
-        if (((buf[i].state) && (buf[i].led_value < LED_ON)) ||
-            ((emergency_state[EMERGENCY_UP]) && (i < EMERGENCY_UP_CNT)) ||
-            ((emergency_state[EMERGENCY_DOWN]) && (i > ws2812_handler.led_count - EMERGENCY_UP_CNT - 1))) {
-            int16_t temp = (int16_t)buf[i].led_value + led_on_step;
-            if (temp > LED_ON) {
-                buf[i].led_value = LED_ON;
+        if (((buf[i].state) && (buf[i].led_value != settings->led_on_value)) ||
+            ((emergency_state[EMERGENCY_UP]) && (i < settings->emergency_cnt[EMERGENCY_UP])) ||
+            ((emergency_state[EMERGENCY_DOWN]) &&
+             (i > ws2812_handler.led_count - settings->emergency_cnt[EMERGENCY_DOWN] - 1))) {
+            int16_t temp = (int16_t)buf[i].led_value + settings->led_on_step;
+            if (temp > settings->led_on_value) {
+                buf[i].led_value = settings->led_on_value;
             } else {
                 buf[i].led_value = temp;
             }
             leds_updated = true;
-        } else if ((!buf[i].state) && (buf[i].led_value > LED_OFF)) {
-            int16_t temp = (int16_t)buf[i].led_value - led_off_step;
-            if (temp < LED_OFF) {
-                buf[i].led_value = LED_OFF;
+        } else if ((!buf[i].state) && (buf[i].led_value != settings->led_off_value)) {
+            int16_t temp = (int16_t)buf[i].led_value - settings->led_off_step;
+            if (temp < settings->led_off_value) {
+                buf[i].led_value = settings->led_off_value;
             } else {
                 buf[i].led_value = temp;
             }
