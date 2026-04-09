@@ -31,18 +31,18 @@ static const char *sensors_name[STAIRWAY_SENS_MAX] = {
 
 static Status status = {0};
 static Settings *settings = NULL;
-static uint32_t prev_ts = 0;
-static uint32_t detector_block_ts[DETECTOR_TYPE_MAX] = {0};
+static uint64_t prev_ts = 0;
+static uint64_t detector_block_ts[DETECTOR_TYPE_MAX] = {0};
 
 static bool led_on_up = false;
 static bool led_on_down = false;
 static bool led_off_up = false;
 static bool led_off_down = false;
 
-static uint32_t led_on_up_ts = 0;
-static uint32_t led_on_down_ts = 0;
-static uint32_t led_off_up_ts = 0;
-static uint32_t led_off_down_ts = 0;
+static uint64_t led_on_up_ts = 0;
+static uint64_t led_on_down_ts = 0;
+static uint64_t led_off_up_ts = 0;
+static uint64_t led_off_down_ts = 0;
 
 static uint32_t led_on_up_cnt = 0;
 static uint32_t led_off_up_cnt = 0;
@@ -55,11 +55,23 @@ Status *status_get(void) {
     return &status;
 }
 
-inline uint32_t get_time_us(void) {
-    return to_us_since_boot(get_absolute_time());
+inline uint64_t get_time_us(void) {
+    static uint32_t last_raw_time = 0;
+    static uint64_t total_us = 0;
+    uint32_t ts = to_us_since_boot(get_absolute_time());
+    uint32_t delta = ts - last_raw_time;
+    total_us += delta;
+    last_raw_time = ts;
+    return total_us;
 }
-inline uint32_t get_time_ms(void) {
-    return to_ms_since_boot(get_absolute_time());
+inline uint64_t get_time_ms(void) {
+    static uint32_t last_raw_time = 0;
+    static uint64_t total_ms = 0;
+    uint32_t ts = to_ms_since_boot(get_absolute_time());
+    uint32_t delta = ts - last_raw_time;
+    total_ms += delta;
+    last_raw_time = ts;
+    return total_ms;
 }
 
 int main() {
@@ -264,7 +276,7 @@ int main() {
             }
         }
 
-        uint32_t ts = get_time_ms();
+        uint64_t ts = get_time_ms();
         if ((ts - prev_ts) > settings->leds_time_interval) {
             prev_ts = ts;
 
@@ -325,13 +337,13 @@ int main() {
             }
         }
 
-        static uint32_t rdt = 0;
+        static uint64_t rdt = 0;
         if (get_time_ms() - rdt > 20) {
             rdt = get_time_ms();
             stairway_leds_refresh();
         }
 
-        static uint32_t led_error_ts = 0;
+        static uint64_t led_error_ts = 0;
         if (error_led_state) {
             led_error_ts = get_time_ms();
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);

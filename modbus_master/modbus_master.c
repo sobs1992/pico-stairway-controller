@@ -19,7 +19,7 @@ static uint32_t send_counter = 0;
 static uint8_t receive_buf[RECEIVE_BUF_SIZE] = {0};
 static uint32_t receive_counter = 0;
 static uint32_t answer_len = 0;
-static uint32_t send_ts = 0;
+static uint64_t send_ts = 0;
 static bool busy = false;
 static ModbusMasterRequest last_request = {0};
 
@@ -202,7 +202,7 @@ bool modbus_master_get_busy(void) {
 ErrCode modbus_master_routine(void) {
     ErrCode err = ERR_SUCCESS;
     RETURN_IF_COND_(!busy, err);
-    uint32_t dt = get_time_ms() - send_ts;
+    uint64_t dt = get_time_ms() - send_ts;
     if ((receive_counter >= answer_len) || (receive_counter >= SEND_BUF_SIZE)) {
         //    printf("DT: %d\n", dt);
         decode_modbus(receive_buf, receive_counter);

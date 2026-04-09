@@ -21,15 +21,15 @@ typedef enum {
 
 #define INFO(...)                                                                                                      \
     do {                                                                                                               \
-        printf("[%08d] ", get_time_ms());                                                                              \
+        printf("[%08lld] ", get_time_ms());                                                                            \
         printf(__VA_ARGS__);                                                                                           \
         printf("\n");                                                                                                  \
     } while (0);
 
 #define ANTISPAM_BEGIN(ms)                                                                                             \
     {                                                                                                                  \
-        static uint32_t _antispam_prev_ts = 0;                                                                         \
-        uint32_t _antispam_ts = get_time_ms();                                                                         \
+        static uint64_t _antispam_prev_ts = 0;                                                                         \
+        uint64_t _antispam_ts = get_time_ms();                                                                         \
         if ((_antispam_ts - _antispam_prev_ts) > ms) {                                                                 \
             _antispam_prev_ts = _antispam_ts;
 

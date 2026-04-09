@@ -10,7 +10,7 @@
 typedef struct {
     uint8_t led_value;
     bool state;
-    uint32_t ts;
+    uint64_t ts;
 } LedState;
 
 static Ws2812_Header ws2812_handler = {0};
@@ -60,7 +60,7 @@ ErrCode stairway_emergency_leds(EmergencyType type, bool state) {
     return err;
 }
 
-ErrCode stairway_leds_set_state(uint32_t index, bool state, uint32_t event_ts) {
+ErrCode stairway_leds_set_state(uint32_t index, bool state, uint64_t event_ts) {
     ErrCode err = ERR_SUCCESS;
     RETURN_IF_COND(index >= ws2812_handler.led_count, ERR_PARAM_INVALID);
 

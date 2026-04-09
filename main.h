@@ -30,12 +30,12 @@ typedef enum {
 typedef struct {
     bool current;
     bool trigger;
-    uint32_t ts;
+    uint64_t ts;
 } SensorState;
 
 typedef struct {
     DetectorState state;
-    uint32_t ts;
+    uint64_t ts;
 } Detector;
 
 typedef struct {
@@ -43,12 +43,12 @@ typedef struct {
     SensorState sensor_state[STAIRWAY_SENS_MAX];
     int32_t people_count;
     int32_t prev_people_count;
-    uint32_t people_ts;
+    uint64_t people_ts;
     bool block_by_light;
     bool light_state;
     uint32_t light_value;
 } Status;
 
 Status *status_get(void);
-uint32_t get_time_us(void);
-uint32_t get_time_ms(void);
+uint64_t get_time_us(void);
+uint64_t get_time_ms(void);
