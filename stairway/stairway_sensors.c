@@ -9,15 +9,16 @@
 typedef enum { DEV_ID_MIN = 0, DEV_ID_UP = DEV_ID_MIN, DEV_ID_DOWN, DEV_ID_MAX } DevId;
 typedef enum { SM_MIN = 0, SM_DEV_ID_0_REQ = SM_MIN, SM_DEV_ID_0_WAIT, SM_DEV_ID_1_REQ, SM_DEV_ID_1_WAIT, SM_MAX } SM;
 
-static ErrCode sensor_0_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                           uint8_t payload_len);
-static ErrCode sensor_1_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                           uint8_t payload_len);
-
 static StairwaySensorsSettings sensors_settings = {0};
 static StairwaySensorsGet sensors_values = {0};
 static bool dev_error[DEV_ID_MAX] = {false};
 static Settings *settings = NULL;
+
+#if !EMULATE_SENSORS
+static ErrCode sensor_0_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
+                           uint8_t payload_len);
+static ErrCode sensor_1_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
+                           uint8_t payload_len);
 
 static const ModbusMasterRequest request[DEV_ID_MAX] = {
     [DEV_ID_UP] =
@@ -99,6 +100,7 @@ static ErrCode sensor_1_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw
 
     return err;
 }
+#endif
 
 ErrCode stairway_sensors_init(StairwaySensorsSettings *s) {
     ErrCode err = ERR_SUCCESS;
@@ -107,13 +109,17 @@ ErrCode stairway_sensors_init(StairwaySensorsSettings *s) {
 
     settings = settings_get();
     sensors_settings = *s;
+#if !EMULATE_SENSORS
     modbus_master_init();
+#endif
 
     return err;
 }
 
 ErrCode stairway_sensors_routine(void) {
     ErrCode err = ERR_SUCCESS;
+
+#if !EMULATE_SENSORS
     static uint32_t dt = 0;
     static SM sm = SM_DEV_ID_0_REQ;
 
@@ -145,6 +151,7 @@ ErrCode stairway_sensors_routine(void) {
 
         dt = get_time_ms();
     }
+#endif
 
     return err;
 }

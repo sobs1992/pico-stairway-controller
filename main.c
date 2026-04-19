@@ -13,6 +13,7 @@
 #include "api/settings_api.h"
 #include <tusb.h>
 #include "hardware/watchdog.h"
+#include "api/network_api.h"
 
 #define WS281x_PIN       3
 #define LIGHT_SENSOR_PIN 0
@@ -97,8 +98,13 @@ int main() {
 
     commands_init();
 
+    LOG_IF_ERROR(net_ap_init("sobs", "12345678"));
+    LOG_IF_ERROR(net_ap_set_state(true));
+
     while (1) {
         watchdog_update();
+        net_poll();
+
         error_led_state = false;
         if (tud_cdc_available()) {
             cli_putchar(getchar());

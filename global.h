@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include "main.h"
 
+#define EMULATE_SENSORS 0
+
 typedef enum {
     ERR_SUCCESS = 0,
     ERR_FAIL = 0x80000001,

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include "api/commands_api.h"
 #include "api/settings_api.h"
+#include "api/network_api.h"
 #include "api/cli_api.h"
 #include "hardware/watchdog.h"
 #include "pico/time.h"
@@ -357,6 +358,18 @@ EXIT:
     return;
 }
 
+static void set_wifi_state(EmbeddedCli *cli, char *args, void *context) {
+    ErrCode err = ERR_SUCCESS;
+    uint8_t count = embeddedCliGetTokenCount(args);
+    TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
+    uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
+    TO_EXIT_IF_ERROR(net_ap_set_state((bool)val));
+    return;
+EXIT:
+    printf("Invalid argument\n");
+    return;
+}
+
 ErrCode commands_init(void) {
     ErrCode err = ERR_SUCCESS;
 
@@ -396,6 +409,8 @@ ErrCode commands_init(void) {
                     set_emergency_block_time);
     cli_add_command("em_up_cnt", "Set emergency UP leds count (arg0: value)", set_emergency_up_cnt);
     cli_add_command("em_down_cnt", "Set emergency DOWN leds count (arg0: value)", set_emergency_down_cnt);
+
+    cli_add_command("wifi", "Set wifi state (arg0: 0 - wifi off, 1 - wifi on)", set_wifi_state);
 
     return err;
 }
