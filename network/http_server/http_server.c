@@ -2,135 +2,99 @@
 
 #include <string.h>
 #include "http_server.h"
+#include "content.h"
 #include "pico/cyw43_arch.h"
 
 #define TCP_PORT    80
 #define POLL_TIME_S 5
 #define HTTP_GET    "GET"
-#define HTTP_RESPONSE_HEADERS                                                                                          \
-    "HTTP/1.1 %d OK\nContent-Length: %d\nContent-Type: text/html; charset=utf-8\nConnection: close\n\n"
-#define HTTP_RESPONSE_REDIRECT "HTTP/1.1 302 Redirect\nLocation: http://%s" PAGE_NAME "\n\n"
-
-#define PAGE_CONTENT "<html><body><h1>Hello from Pico!</h1></body></html>"
-//#define PAGE_CONTENT                                                                                                   \
-//    "<html><body><h1>Hello from Pico.</h1><p>Led is %s</p><p><a href=\"?led=%d\">Turn led %s</a></body></html>"
-
-#define LED_PARAM "led=%d"
-
-#define PAGE_NAME "/index.html"
 
 typedef struct TCP_CONNECT_STATE_T_ {
     struct tcp_pcb *pcb;
     int sent_len;
-    char headers[128];
-    char result[512];
-    int header_len;
-    int result_len;
+    char headers[HTTP_HEADER_MAX_SIZE];
+    ContentResponse response;
     ip_addr_t *gw;
 } TCP_CONNECT_STATE_T;
 
 static err_t tcp_close_client_connection(TCP_CONNECT_STATE_T *con_state, struct tcp_pcb *client_pcb, err_t close_err);
 
-static int test_server_content(const char *request, const char *params, char *result, size_t max_result_len) {
-    int len = 0;
-    if (strncmp(request, PAGE_NAME, sizeof(PAGE_NAME) - 1) == 0) {
-        // See if the user changed it
-#if 0
-        int led_state = cyw43_arch_gpio_get(CYW43_WL_GPIO_LED_PIN);
-#endif
-        if (params) {
-#if 0
-            int led_param = sscanf(params, LED_PARAM, &led_state);
-            if (led_param == 1) {
-                cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_state);
-            }
-#endif
-        }
-        // Generate result
-#if 0
-        len = snprintf(result, max_result_len, PAGE_CONTENT, led_state ? "ON" : "OFF", led_state ? 0 : 1, "TOGGLE");
-#else
-        strncpy(result, PAGE_CONTENT, max_result_len);
-        len = strlen(PAGE_CONTENT);
-#endif
-    }
-    return len;
-}
-
-err_t tcp_server_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err) {
+static err_t tcp_server_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t tcp_err) {
+    ErrCode err = ERR_SUCCESS;
     TCP_CONNECT_STATE_T *con_state = (TCP_CONNECT_STATE_T *)arg;
+    ContentRequest req = {0};
+    memset(&req, 0, sizeof(req));
+
     if (!p) {
         INFO("Connection closed");
         return tcp_close_client_connection(con_state, pcb, ERR_OK);
     }
     assert(con_state && con_state->pcb == pcb);
     if (p->tot_len > 0) {
-        INFO("tcp_server_recv %d err %d", p->tot_len, err);
-#if 0
-        for (struct pbuf *q = p; q != NULL; q = q->next) {
-            INFO("in: %.*s", q->len, q->payload);
-        }
-#endif
         // Copy the request into the buffer
         pbuf_copy_partial(p, con_state->headers,
                           p->tot_len > sizeof(con_state->headers) - 1 ? sizeof(con_state->headers) - 1 : p->tot_len, 0);
-
+#if 0
+        INFO("Receive header: %s", con_state->headers);
+#endif
         // Handle GET request
         if (strncmp(HTTP_GET, con_state->headers, sizeof(HTTP_GET) - 1) == 0) {
-            char *request = con_state->headers + sizeof(HTTP_GET); // + space
-            char *params = strchr(request, '?');
+            req.request = con_state->headers + sizeof(HTTP_GET); // + space;
+            char *end_req = strstr(req.request, "HTTP/");
+            if (end_req) {
+                *end_req = 0;
+            }
+
+            char *params = strchr(req.request, '?');
             if (params) {
-                if (*params) {
-                    char *space = strchr(request, ' ');
-                    *params++ = 0;
-                    if (space) {
-                        *space = 0;
+                *params++ = 0;
+                uint32_t params_cnt = 1;
+                uint32_t len = strlen(params);
+                for (uint32_t i = 0; i < len; i++) {
+                    if (params[i] == '&') {
+                        params_cnt++;
+                        params[i] = 0;
                     }
-                } else {
-                    params = NULL;
+                }
+                req.params = malloc(sizeof(req.params[0]) * params_cnt);
+                TO_EXIT_IF_COND(req.params == NULL, ERR_MEM_ALLOC_FAIL);
+                memset(req.params, 0, sizeof(req.params[0]) * params_cnt);
+                for (uint32_t i = 0; i < params_cnt; i++) {
+                    len = strlen(params);
+                    req.params[i] = malloc(len);
+                    TO_EXIT_IF_COND(req.params[i] == NULL, ERR_MEM_ALLOC_FAIL);
+                    strcpy(req.params[req.params_n], params);
+                    params += len + 1;
+                    req.params_n++;
                 }
             }
 
             // Generate content
-            con_state->result_len = test_server_content(request, params, con_state->result, sizeof(con_state->result));
-            INFO("Request: %s?%s", request, params);
-            INFO("Result: %d", con_state->result_len);
+            TO_EXIT_IF_ERROR(generate_content(con_state->gw, &req, &con_state->response));
 
-            // Check we had enough buffer space
-            if (con_state->result_len > sizeof(con_state->result) - 1) {
-                INFO("Too much result data %d", con_state->result_len);
-                return tcp_close_client_connection(con_state, pcb, ERR_CLSD);
-            }
-
-            // Generate web page
-            if (con_state->result_len > 0) {
-                con_state->header_len = snprintf(con_state->headers, sizeof(con_state->headers), HTTP_RESPONSE_HEADERS,
-                                                 200, con_state->result_len);
-                if (con_state->header_len > sizeof(con_state->headers) - 1) {
-                    INFO("Too much header data %d", con_state->header_len);
-                    return tcp_close_client_connection(con_state, pcb, ERR_CLSD);
+            if (req.params) {
+                for (uint32_t i = 0; i < req.params_n; i++) {
+                    if (req.params[i]) {
+                        free(req.params[i]);
+                    }
                 }
-            } else {
-                // Send redirect
-                con_state->header_len = snprintf(con_state->headers, sizeof(con_state->headers), HTTP_RESPONSE_REDIRECT,
-                                                 ipaddr_ntoa(con_state->gw));
-                INFO("Sending redirect %s", con_state->headers);
+                free(req.params);
             }
 
             // Send the headers to the client
             con_state->sent_len = 0;
-            err_t err = tcp_write(pcb, con_state->headers, con_state->header_len, 0);
-            if (err != ERR_OK) {
-                INFO("failed to write header data %d", err);
-                return tcp_close_client_connection(con_state, pcb, err);
+            err_t send_err = tcp_write(pcb, con_state->response.header, con_state->response.header_len, 0);
+            if (send_err != ERR_OK) {
+                INFO("failed to write header data %d", send_err);
+                return tcp_close_client_connection(con_state, pcb, send_err);
             }
 
             // Send the body to the client
-            if (con_state->result_len) {
-                err = tcp_write(pcb, con_state->result, con_state->result_len, 0);
-                if (err != ERR_OK) {
-                    INFO("failed to write result data %d", err);
-                    return tcp_close_client_connection(con_state, pcb, err);
+            if (con_state->response.body_len) {
+                send_err = tcp_write(pcb, con_state->response.body, con_state->response.body_len, 0);
+                if (send_err != ERR_OK) {
+                    INFO("failed to write result data %d", send_err);
+                    return tcp_close_client_connection(con_state, pcb, send_err);
                 }
             }
         }
@@ -138,6 +102,16 @@ err_t tcp_server_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
     }
     pbuf_free(p);
     return ERR_OK;
+EXIT:
+    if (req.params) {
+        for (uint32_t i = 0; i < req.params_n; i++) {
+            if (req.params[i]) {
+                free(req.params[i]);
+            }
+        }
+        free(req.params);
+    }
+    return tcp_close_client_connection(con_state, pcb, ERR_CLSD);
 }
 
 static void tcp_server_close(TCP_SERVER_T *state) {
@@ -171,10 +145,16 @@ static err_t tcp_close_client_connection(TCP_CONNECT_STATE_T *con_state, struct 
 
 static err_t tcp_server_sent(void *arg, struct tcp_pcb *pcb, u16_t len) {
     TCP_CONNECT_STATE_T *con_state = (TCP_CONNECT_STATE_T *)arg;
-    INFO("tcp_server_sent %u", len);
     con_state->sent_len += len;
-    if (con_state->sent_len >= con_state->header_len + con_state->result_len) {
-        INFO("All done");
+
+    if (con_state->sent_len >= con_state->response.header_len + con_state->response.body_len) {
+        if (con_state->response.header) {
+            free(con_state->response.header);
+        }
+        if (con_state->response.body) {
+            free(con_state->response.body);
+        }
+        memset(&con_state->response, 0, sizeof(con_state->response));
         return tcp_close_client_connection(con_state, pcb, ERR_OK);
     }
     return ERR_OK;
@@ -182,7 +162,6 @@ static err_t tcp_server_sent(void *arg, struct tcp_pcb *pcb, u16_t len) {
 
 static err_t tcp_server_poll(void *arg, struct tcp_pcb *pcb) {
     TCP_CONNECT_STATE_T *con_state = (TCP_CONNECT_STATE_T *)arg;
-    INFO("tcp_server_poll_fn");
     return tcp_close_client_connection(con_state, pcb, ERR_OK); // Just disconnect clent?
 }
 
@@ -200,7 +179,6 @@ static err_t tcp_server_accept(void *arg, struct tcp_pcb *client_pcb, err_t err)
         INFO("Failure in accept");
         return ERR_VAL;
     }
-    INFO("Client connected");
 
     // Create the state for the connection
     TCP_CONNECT_STATE_T *con_state = calloc(1, sizeof(TCP_CONNECT_STATE_T));

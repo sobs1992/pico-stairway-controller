@@ -14,6 +14,7 @@
 #include <tusb.h>
 #include "hardware/watchdog.h"
 #include "api/network_api.h"
+#include <inttypes.h>
 
 #define WS281x_PIN       3
 #define LIGHT_SENSOR_PIN 0
@@ -133,12 +134,12 @@ int main() {
 
         if ((status.light_state) && (!settings->disable_light_sensor)) {
             if ((status.people_count == 0) && (!status.block_by_light)) {
-                INFO("Block by light (value: %d)", status.light_value);
+                INFO("Block by light (value: %" PRIu32 ")", status.light_value);
                 status.block_by_light = true;
             }
         } else {
             if (status.block_by_light) {
-                INFO("Unlock by light (value: %d)", status.light_value);
+                INFO("Unlock by light (value: %" PRIu32 ")", status.light_value);
                 status.block_by_light = false;
             }
         }
@@ -178,7 +179,7 @@ int main() {
                         status.detector[i].ts = get_time_ms();
                         status.people_count++;
                         status.people_ts = status.detector[i].ts;
-                        INFO("People: %d", status.people_count);
+                        INFO("People: %" PRId32, status.people_count);
                     }
                 } break;
                 case DETECTOR_STATE_SECOND_LOCK: {
@@ -195,7 +196,7 @@ int main() {
                         if (status.people_count) {
                             status.people_count--;
                             status.people_ts = status.detector[i].ts;
-                            INFO("People: %d", status.people_count);
+                            INFO("People: %" PRId32, status.people_count);
                         }
                     }
                 } break;
@@ -254,7 +255,7 @@ int main() {
             status.prev_people_count = 0;
             status.people_count = 0;
             INFO("Timeout done!");
-            INFO("People: %d", status.people_count);
+            INFO("People: %" PRId32, status.people_count);
             if (last_det == DETECTOR_TYPE_UP) {
                 led_off_down = true;
                 led_off_down_ts = get_time_ms();

@@ -1,6 +1,7 @@
 #define FILE_ID "CM01"
 
 #include <stdlib.h>
+#include <inttypes.h>
 #include "api/commands_api.h"
 #include "api/settings_api.h"
 #include "api/network_api.h"
@@ -12,43 +13,43 @@ static Settings *settings = NULL;
 static Status *status = NULL;
 
 static void get_status(EmbeddedCli *cli, char *args, void *context) {
-    printf("People detected: %d\n", status->people_count);
+    printf("People detected: %" PRId32 "d\n", status->people_count);
 
     printf("Light sensor: %s\n", (settings->disable_light_sensor) ? "Disabled" : "Enabled");
     printf("\tCurrent state: %s\n"
-           "\tCurrent light: %d\n"
-           "\tDay value: %d\n"
-           "\tNight value: %d\n",
+           "\tCurrent light: %" PRIu32 "\n"
+           "\tDay value: %" PRIu32 "\n"
+           "\tNight value: %" PRIu32 "\n",
            (status->light_state) ? "Day" : "Night", status->light_value, settings->light_sensor_day_value,
            settings->light_sensor_night_value);
 
     printf("Sensors:\n"
-           "\tTrigger UP FIRST: %d mm\n"
-           "\tTrigger UP SECOND: %d mm\n"
-           "\tTrigger DOWN FIRST: %d mm\n"
-           "\tTrigger DOWN SECOND: %d mm\n",
+           "\tTrigger UP FIRST: %" PRIu16 " mm\n"
+           "\tTrigger UP SECOND: %" PRIu16 " mm\n"
+           "\tTrigger DOWN FIRST: %" PRIu16 " mm\n"
+           "\tTrigger DOWN SECOND: %" PRIu16 " mm\n",
            settings->dist_trigger[STAIRWAY_SENS_UP_FIRST], settings->dist_trigger[STAIRWAY_SENS_UP_SECOND],
            settings->dist_trigger[STAIRWAY_SENS_DOWN_FIRST], settings->dist_trigger[STAIRWAY_SENS_DOWN_SECOND]);
-    printf("\tDebounce time: %d ms\n", settings->sensor_debouce_time);
+    printf("\tDebounce time: %" PRIu32 " ms\n", settings->sensor_debouce_time);
     printf("\tSwap UP: %s\n"
            "\tSwap DOWN: %s\n",
            (settings->sensor_up_swap) ? "yes" : "no", (settings->sensor_down_swap) ? "yes" : "no");
 
     printf("Leds:\n");
-    printf("\tLeds count: %d\n", settings->led_count);
-    printf("\tOn/off interval: %d ms\n", settings->leds_time_interval);
-    printf("\tOff timeout: %d ms\n", settings->leds_off_timeout);
-    printf("\tOn value: %d\n"
-           "\tOn step: %d\n",
+    printf("\tLeds count: %" PRIu32 "\n", settings->led_count);
+    printf("\tOn/off interval: %" PRIu32 " ms\n", settings->leds_time_interval);
+    printf("\tOff timeout: %" PRIu32 " ms\n", settings->leds_off_timeout);
+    printf("\tOn value: %" PRIu8 "\n"
+           "\tOn step: %" PRIu8 "\n",
            settings->led_on_value, settings->led_on_step);
-    printf("\tOff value: %d\n"
-           "\tOff step: %d\n",
+    printf("\tOff value: %" PRIu8 "\n"
+           "\tOff step: %" PRIu8 "\n",
            settings->led_off_value, settings->led_off_step);
 
     printf("Emergency leds: %s\n", (settings->disable_emergency) ? "Disabled" : "Enabled");
-    printf("\tEmergency up count: %d\n"
-           "\tEmergency down leds count: %d\n"
-           "\tEmergency block: %d ms\n",
+    printf("\tEmergency up count: %" PRIu32 "\n"
+           "\tEmergency down leds count: %" PRIu32 "\n"
+           "\tEmergency block: %" PRIu32 " ms\n",
            settings->emergency_cnt[EMERGENCY_UP], settings->emergency_cnt[EMERGENCY_DOWN],
            settings->emergency_block_ms);
 }
@@ -78,7 +79,7 @@ static void set_day_light_value(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->light_sensor_day_value = val;
-    printf("Day light value: %d\n", settings->light_sensor_day_value);
+    printf("Day light value: %" PRIu32 "\n", settings->light_sensor_day_value);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -92,7 +93,7 @@ static void set_night_light_value(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->light_sensor_night_value = val;
-    printf("Night light value: %d\n", settings->light_sensor_night_value);
+    printf("Night light value: %" PRIu32 "\n", settings->light_sensor_night_value);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -121,7 +122,7 @@ static void set_dist_up_first_value(EmbeddedCli *cli, char *args, void *context)
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->dist_trigger[STAIRWAY_SENS_UP_FIRST] = val;
-    printf("Sensor UP FIRST trigger value: %d\n", settings->dist_trigger[STAIRWAY_SENS_UP_FIRST]);
+    printf("Sensor UP FIRST trigger value: %" PRIu16 "\n", settings->dist_trigger[STAIRWAY_SENS_UP_FIRST]);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -135,7 +136,7 @@ static void set_dist_up_second_value(EmbeddedCli *cli, char *args, void *context
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->dist_trigger[STAIRWAY_SENS_UP_SECOND] = val;
-    printf("Sensor UP SECOND trigger value: %d\n", settings->dist_trigger[STAIRWAY_SENS_UP_SECOND]);
+    printf("Sensor UP SECOND trigger value: %" PRIu16 "\n", settings->dist_trigger[STAIRWAY_SENS_UP_SECOND]);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -149,7 +150,7 @@ static void set_dist_down_first_value(EmbeddedCli *cli, char *args, void *contex
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->dist_trigger[STAIRWAY_SENS_DOWN_FIRST] = val;
-    printf("Sensor DOWN FIRST trigger value: %d\n", settings->dist_trigger[STAIRWAY_SENS_DOWN_FIRST]);
+    printf("Sensor DOWN FIRST trigger value: %" PRIu16 "\n", settings->dist_trigger[STAIRWAY_SENS_DOWN_FIRST]);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -163,7 +164,7 @@ static void set_dist_down_second_value(EmbeddedCli *cli, char *args, void *conte
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->dist_trigger[STAIRWAY_SENS_DOWN_SECOND] = val;
-    printf("Sensor DOWN SECOND trigger value: %d\n", settings->dist_trigger[STAIRWAY_SENS_DOWN_SECOND]);
+    printf("Sensor DOWN SECOND trigger value: %" PRIu16 "\n", settings->dist_trigger[STAIRWAY_SENS_DOWN_SECOND]);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -177,7 +178,7 @@ static void set_sens_debounce(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->sensor_debouce_time = val;
-    printf("Sensor debounce time: %d ms\n", settings->sensor_debouce_time);
+    printf("Sensor debounce time: %" PRIu32 " ms\n", settings->sensor_debouce_time);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -221,7 +222,7 @@ static void set_leds_count(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->led_count = val;
-    printf("Leds count: %d\n", settings->led_count);
+    printf("Leds count: %" PRIu32 "\n", settings->led_count);
     TO_EXIT_IF_ERROR(settings_write());
     printf("Device will reboot!\n");
     sleep_ms(1000);
@@ -238,7 +239,7 @@ static void set_leds_time_interval(EmbeddedCli *cli, char *args, void *context) 
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->leds_time_interval = val;
-    printf("Leds On/Off time interval: %d ms\n", settings->leds_time_interval);
+    printf("Leds On/Off time interval: %" PRIu32 " ms\n", settings->leds_time_interval);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -252,7 +253,7 @@ static void set_leds_off_timeout(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->leds_off_timeout = val;
-    printf("Leds Off timeout: %d ms\n", settings->leds_off_timeout);
+    printf("Leds Off timeout: %" PRIu32 " ms\n", settings->leds_off_timeout);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -266,7 +267,7 @@ static void set_leds_on_value(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->led_on_value = val;
-    printf("Leds On value: %d\n", settings->led_on_value);
+    printf("Leds On value: %" PRIu8 "\n", settings->led_on_value);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -280,7 +281,7 @@ static void set_leds_off_value(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->led_off_value = val;
-    printf("Leds Off value: %d\n", settings->led_off_value);
+    printf("Leds Off value: %" PRIu8 "\n", settings->led_off_value);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -294,7 +295,7 @@ static void set_leds_on_step(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->led_on_step = val;
-    printf("Leds On step: %d\n", settings->led_on_step);
+    printf("Leds On step: %" PRIu8 "\n", settings->led_on_step);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -308,7 +309,7 @@ static void set_leds_off_step(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->led_off_step = val;
-    printf("Leds Off step: %d\n", settings->led_off_step);
+    printf("Leds Off step: %" PRIu8 "\n", settings->led_off_step);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -322,7 +323,7 @@ static void set_emergency_block_time(EmbeddedCli *cli, char *args, void *context
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->emergency_block_ms = val;
-    printf("Emergency blocking time: %d ms\n", settings->emergency_block_ms);
+    printf("Emergency blocking time: %" PRIu32 " ms\n", settings->emergency_block_ms);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -336,7 +337,7 @@ static void set_emergency_up_cnt(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->emergency_cnt[EMERGENCY_UP] = val;
-    printf("Emergency UP leds count: %d\n", settings->emergency_cnt[EMERGENCY_UP]);
+    printf("Emergency UP leds count: %" PRIu32 "\n", settings->emergency_cnt[EMERGENCY_UP]);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -350,7 +351,7 @@ static void set_emergency_down_cnt(EmbeddedCli *cli, char *args, void *context) 
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     settings->emergency_cnt[EMERGENCY_DOWN] = val;
-    printf("Emergency DOWN leds count: %d\n", settings->emergency_cnt[EMERGENCY_DOWN]);
+    printf("Emergency DOWN leds count: %" PRIu32 "\n", settings->emergency_cnt[EMERGENCY_DOWN]);
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:

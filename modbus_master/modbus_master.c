@@ -23,8 +23,6 @@ static uint64_t send_ts = 0;
 static bool busy = false;
 static ModbusMasterRequest last_request = {0};
 
-static ErrCode rx_timer_control(bool state);
-
 static uint16_t crc_chk(uint8_t *dat, uint8_t length) {
     uint16_t j;
     uint16_t reg_crc = 0xFFFF;
@@ -88,7 +86,6 @@ static ErrCode decode_modbus(uint8_t *buf, uint16_t size) {
 }
 
 static void modbus_master_uart_rx_irq(void) {
-    ErrCode err = ERR_SUCCESS;
     while (uart_is_readable(MODBUS_MASTER_UART)) {
         if (receive_counter < RECEIVE_BUF_SIZE - 1) {
             receive_buf[receive_counter++] = uart_getc(MODBUS_MASTER_UART);

@@ -28,7 +28,10 @@ add_executable(main
     network/dhcp_server/dhcpserver.c
     network/dns_server/dnsserver.c
     network/http_server/http_server.c
+    network/http_server/content.c
 )
+
+target_compile_options(main PRIVATE -Wall -Werror)
 
 pico_generate_pio_header(main ${CMAKE_CURRENT_LIST_DIR}/ws2812_pio/ws2812.pio)
 
@@ -44,6 +47,7 @@ target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/network/dhcp_server
     ${CMAKE_CURRENT_LIST_DIR}/network/dns_server
     ${CMAKE_CURRENT_LIST_DIR}/network/http_server
+    ${CMAKE_CURRENT_LIST_DIR}/network/generated
     ${CMAKE_CURRENT_LIST_DIR}/
 )
 

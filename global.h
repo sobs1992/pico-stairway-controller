@@ -78,8 +78,8 @@ typedef enum {
 
 #define TO_EXIT_IF_COND(cond, err_code)                                                                                \
     if (cond) {                                                                                                        \
-        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err_code);                                                      \
         err = err_code;                                                                                                \
+        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
         goto EXIT;                                                                                                     \
     }
 

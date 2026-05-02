@@ -15,8 +15,6 @@ typedef struct {
 
 static Ws2812_Header ws2812_handler = {0};
 static LedState *buf = {NULL};
-static bool emergency_up_state = false;
-static bool emergency_down_state = false;
 static bool emergency_state[EMERGENCY_MAX] = {false};
 static Settings *settings = NULL;
 
