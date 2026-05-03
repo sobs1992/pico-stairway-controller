@@ -13,7 +13,7 @@ static Settings *settings = NULL;
 static Status *status = NULL;
 
 static void get_status(EmbeddedCli *cli, char *args, void *context) {
-    printf("People detected: %" PRId32 "d\n", status->people_count);
+    printf("People detected: %" PRId32 "\n", status->people_count);
 
     printf("Light sensor: %s\n", (settings->disable_light_sensor) ? "Disabled" : "Enabled");
     printf("\tCurrent state: %s\n"

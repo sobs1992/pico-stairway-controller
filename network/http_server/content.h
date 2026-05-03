@@ -7,7 +7,13 @@ typedef struct {
     char *request;
     char **params;
     uint32_t params_n;
-} ContentRequest;
+} ContentGetRequest;
+
+typedef struct {
+    char *request;
+    char *body;
+    uint32_t body_len;
+} ContentPostRequest;
 
 typedef struct {
     char *header;
@@ -16,4 +22,5 @@ typedef struct {
     uint32_t body_len;
 } ContentResponse;
 
-ErrCode generate_content(ip_addr_t *gw, ContentRequest *request, ContentResponse *response);
+ErrCode get_content(ip_addr_t *gw, ContentGetRequest *request, ContentResponse *response);
+ErrCode post_content(ip_addr_t *gw, ContentPostRequest *request, ContentResponse *response);

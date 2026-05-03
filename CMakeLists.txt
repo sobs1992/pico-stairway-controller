@@ -63,6 +63,8 @@ target_link_libraries(
     pico_time
 )
 
+set_property(TARGET main APPEND_STRING PROPERTY LINK_FLAGS "-Wl,--print-memory-usage")
+
 # enable usb output, disable uart output
 pico_enable_stdio_usb(main 1)
 pico_enable_stdio_uart(main 0)
