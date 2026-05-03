@@ -4,7 +4,7 @@
 #include "lwip/pbuf.h"
 #include "lwip/tcp.h"
 
-#define HTTP_HEADER_MAX_SIZE 128
+#define HTTP_HEADER_MAX_SIZE 2048
 
 typedef struct TCP_SERVER_T_ {
     struct tcp_pcb *server_pcb;

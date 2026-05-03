@@ -12,11 +12,19 @@
 
 #define CHUNK_SIZE 1024
 
+typedef struct {
+    char data[HTTP_HEADER_MAX_SIZE];
+    int data_len;
+    int content_len;
+    int content_len_total;
+    bool header_complete;
+} HttpRequest;
+
 typedef struct TCP_CONNECT_STATE_T_ {
     struct tcp_pcb *pcb;
-    int sent_len;
-    char headers[HTTP_HEADER_MAX_SIZE];
+    HttpRequest request;
     ContentResponse response;
+    int sent_len;
     ip_addr_t *gw;
 } TCP_CONNECT_STATE_T;
 
@@ -123,85 +131,139 @@ static err_t tcp_server_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err
         return tcp_close_client_connection(con_state, pcb, ERR_OK);
     }
     assert(con_state && con_state->pcb == pcb);
+
     if (p->tot_len > 0) {
-        // Copy the request into the buffer
-        pbuf_copy_partial(p, con_state->headers,
-                          p->tot_len > sizeof(con_state->headers) - 1 ? sizeof(con_state->headers) - 1 : p->tot_len, 0);
+        char header_temp[HTTP_HEADER_MAX_SIZE];
+        int header_temp_size = p->tot_len > sizeof(header_temp) - 1 ? sizeof(header_temp) - 1 : p->tot_len;
+        pbuf_copy_partial(p, header_temp, header_temp_size, 0);
+        header_temp[header_temp_size] = '\0';
 #if 0
-        INFO("Receive header: %s", con_state->headers);
+        INFO("HEADER_TEMP: %s", header_temp);
 #endif
-        // Handle GET request
-        if (strncmp(HTTP_GET, con_state->headers, sizeof(HTTP_GET) - 1) == 0) {
-            req_get.request = con_state->headers + sizeof(HTTP_GET); // + space;
-            char *end_req = strstr(req_get.request, "HTTP/");
-            if (end_req) {
-                *end_req = 0;
+        if (!con_state->request.header_complete) {
+            memcpy(con_state->request.data + con_state->request.data_len, header_temp, header_temp_size);
+            con_state->request.data_len += header_temp_size;
+            char *body_start = NULL;
+            char *header_end = strstr(con_state->request.data, "\n\n");
+            if (header_end) {
+                body_start = header_end += sizeof("\n\n") - 1;
+            } else {
+                header_end = strstr(con_state->request.data, "\r\n\r\n");
+                if (header_end) {
+                    body_start = header_end += sizeof("\r\n\r\n") - 1;
+                }
             }
 
-            char *params = strchr(req_get.request, '?');
-            if (params) {
-                *params++ = 0;
-                uint32_t params_cnt = 1;
-                uint32_t len = strlen(params);
-                for (uint32_t i = 0; i < len; i++) {
-                    if (params[i] == '&') {
-                        params_cnt++;
-                        params[i] = 0;
+            if (header_end) {
+                con_state->request.header_complete = true;
+                char *cl = strstr(con_state->request.data, "Content-Length:");
+                if (cl) {
+                    con_state->request.content_len_total = atoi(cl + 16);
+                    int body_len = strlen(body_start);
+                    if (body_len) {
+                        strcpy(con_state->request.data + con_state->request.data_len, body_start);
+                        con_state->request.data_len += body_len;
+                        con_state->request.content_len += body_len;
+                        con_state->request.data[con_state->request.data_len] = 0;
                     }
                 }
-                req_get.params = malloc(sizeof(req_get.params[0]) * params_cnt);
-                TO_EXIT_IF_COND(req_get.params == NULL, ERR_MEM_ALLOC_FAIL);
-                memset(req_get.params, 0, sizeof(req_get.params[0]) * params_cnt);
-                for (uint32_t i = 0; i < params_cnt; i++) {
-                    len = strlen(params);
-                    req_get.params[i] = malloc(len);
-                    TO_EXIT_IF_COND(req_get.params[i] == NULL, ERR_MEM_ALLOC_FAIL);
-                    strcpy(req_get.params[req_get.params_n], params);
-                    params += len + 1;
-                    req_get.params_n++;
-                }
             }
-
-            // Generate content
-            TO_EXIT_IF_ERROR(get_content(con_state->gw, &req_get, &con_state->response));
-
-            if (req_get.params) {
-                for (uint32_t i = 0; i < req_get.params_n; i++) {
-                    if (req_get.params[i]) {
-                        free(req_get.params[i]);
-                    }
-                }
-                free(req_get.params);
+        } else {
+            if (con_state->request.content_len < con_state->request.content_len_total) {
+                memcpy(con_state->request.data + con_state->request.data_len, header_temp, header_temp_size);
+                con_state->request.data_len += header_temp_size;
+                con_state->request.content_len += header_temp_size;
+                con_state->request.data[con_state->request.data_len] = 0;
             }
-        } else if (strncmp(HTTP_POST, con_state->headers, sizeof(HTTP_POST) - 1) == 0) {
-            req_post.request = con_state->headers + sizeof(HTTP_POST); // + space;
-            INFO("POST REQUEST: %s\n", req_post.request);
-            char *end_req = strstr(req_post.request, "HTTP/");
-            if (end_req) {
-                *end_req++ = 0;
-            }
-            char *body_start = strstr(end_req, "\n\n");
-            if (body_start) {
-                body_start += sizeof("\n\n") - 1;
-            } else
-                body_start = strstr(end_req, "\r\n\r\n");
-            if (body_start) {
-                body_start += sizeof("\r\n\r\n") - 1;
-            }
-            TO_EXIT_IF_COND(body_start == NULL, ERR_FAIL);
-            req_post.body = body_start;
-            req_post.body_len = strlen(body_start);
-
-            // Generate content
-            TO_EXIT_IF_ERROR(post_content(con_state->gw, &req_post, &con_state->response));
         }
-        err_t send_err = send_tcp_data(con_state);
-        TO_EXIT_IF_COND(send_err != ERR_OK, ERR_FAIL);
+        if ((con_state->request.header_complete) &&
+            (con_state->request.content_len == con_state->request.content_len_total)) {
+#if 0
+            INFO("Receive header: %s", con_state->request.data);
+#endif
+            // Handle GET request
+            if (strncmp(HTTP_GET, con_state->request.data, sizeof(HTTP_GET) - 1) == 0) {
+                req_get.request = con_state->request.data + sizeof(HTTP_GET); // + space;
+                char *end_req = strstr(req_get.request, "HTTP/");
+                if (end_req) {
+                    *end_req = 0;
+                }
+
+                char *params = strchr(req_get.request, '?');
+                if (params) {
+                    *params++ = 0;
+                    uint32_t params_cnt = 1;
+                    uint32_t len = strlen(params);
+                    for (uint32_t i = 0; i < len; i++) {
+                        if (params[i] == '&') {
+                            params_cnt++;
+                            params[i] = 0;
+                        }
+                    }
+                    req_get.params = malloc(sizeof(req_get.params[0]) * params_cnt);
+                    TO_EXIT_IF_COND(req_get.params == NULL, ERR_MEM_ALLOC_FAIL);
+                    memset(req_get.params, 0, sizeof(req_get.params[0]) * params_cnt);
+                    for (uint32_t i = 0; i < params_cnt; i++) {
+                        len = strlen(params);
+                        req_get.params[i] = malloc(len);
+                        TO_EXIT_IF_COND(req_get.params[i] == NULL, ERR_MEM_ALLOC_FAIL);
+                        strcpy(req_get.params[req_get.params_n], params);
+                        params += len + 1;
+                        req_get.params_n++;
+                    }
+                }
+
+                // Generate content
+                TO_EXIT_IF_ERROR(get_content(con_state->gw, &req_get, &con_state->response));
+                memset(&con_state->request, 0, sizeof(con_state->request));
+
+                if (req_get.params) {
+                    for (uint32_t i = 0; i < req_get.params_n; i++) {
+                        if (req_get.params[i]) {
+                            free(req_get.params[i]);
+                        }
+                    }
+                    free(req_get.params);
+                }
+
+                err_t send_err = send_tcp_data(con_state);
+                TO_EXIT_IF_COND(send_err != ERR_OK, ERR_FAIL);
+            } else if (strncmp(HTTP_POST, con_state->request.data, sizeof(HTTP_POST) - 1) == 0) {
+                req_post.request = con_state->request.data + sizeof(HTTP_POST); // + space;
+                INFO("POST REQUEST: %s\n", req_post.request);
+                char *end_req = strstr(req_post.request, "HTTP/");
+                if (end_req) {
+                    *end_req++ = 0;
+                }
+                char *body_start = strstr(end_req, "\n\n");
+                if (body_start) {
+                    body_start += sizeof("\n\n") - 1;
+                } else {
+                    body_start = strstr(end_req, "\r\n\r\n");
+                    if (body_start) {
+                        body_start += sizeof("\r\n\r\n") - 1;
+                    }
+                }
+
+                TO_EXIT_IF_COND(body_start == NULL, ERR_FAIL);
+                req_post.body = body_start;
+                req_post.body_len = strlen(body_start);
+
+                // Generate content
+                TO_EXIT_IF_ERROR(post_content(con_state->gw, &req_post, &con_state->response));
+                memset(&con_state->request, 0, sizeof(con_state->request));
+
+                err_t send_err = send_tcp_data(con_state);
+                TO_EXIT_IF_COND(send_err != ERR_OK, ERR_FAIL);
+            }
+        }
+
         tcp_recved(pcb, p->tot_len);
     }
     pbuf_free(p);
     return ERR_OK;
 EXIT:
+    memset(&con_state->request, 0, sizeof(con_state->request));
     if (req_get.params) {
         for (uint32_t i = 0; i < req_get.params_n; i++) {
             if (req_get.params[i]) {
