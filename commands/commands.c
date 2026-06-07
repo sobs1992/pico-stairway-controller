@@ -15,7 +15,7 @@ static Status *status = NULL;
 static void get_status(EmbeddedCli *cli, char *args, void *context) {
     printf("People detected: %" PRId32 "\n", status->people_count);
 
-    printf("Light sensor: %s\n", (settings->disable_light_sensor) ? "Disabled" : "Enabled");
+    printf("Light sensor: %s\n", (settings->use_light_sensor) ? "Enabled" : "Disabled");
     printf("\tCurrent state: %s\n"
            "\tCurrent light: %" PRIu32 "\n"
            "\tDay value: %" PRIu32 "\n"
@@ -46,7 +46,7 @@ static void get_status(EmbeddedCli *cli, char *args, void *context) {
            "\tOff step: %" PRIu8 "\n",
            settings->led_off_value, settings->led_off_step);
 
-    printf("Emergency leds: %s\n", (settings->disable_emergency) ? "Disabled" : "Enabled");
+    printf("Emergency leds: %s\n", (settings->use_emergency) ? "Enabled" : "Disabled");
     printf("\tEmergency up count: %" PRIu32 "\n"
            "\tEmergency down leds count: %" PRIu32 "\n"
            "\tEmergency block: %" PRIu32 " ms\n",
@@ -55,7 +55,7 @@ static void get_status(EmbeddedCli *cli, char *args, void *context) {
 }
 
 static void set_default(EmbeddedCli *cli, char *args, void *context) {
-    settings_default();
+    settings_default(true);
 }
 
 static void set_light_state(EmbeddedCli *cli, char *args, void *context) {
@@ -64,8 +64,8 @@ static void set_light_state(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     TO_EXIT_IF_COND(val > 1, ERR_PARAM_INVALID);
-    settings->disable_light_sensor = !val;
-    printf("Light sensor: %s\n", (settings->disable_light_sensor) ? "Disabled" : "Enabled");
+    settings->use_light_sensor = val;
+    printf("Light sensor: %s\n", (settings->use_light_sensor) ? "Enabled" : "Disabled");
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:
@@ -107,8 +107,8 @@ static void set_emergency_state(EmbeddedCli *cli, char *args, void *context) {
     TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
     uint32_t val = strtoul(embeddedCliGetToken(args, 1), NULL, 10);
     TO_EXIT_IF_COND(val > 1, ERR_PARAM_INVALID);
-    settings->disable_emergency = !val;
-    printf("Emergency leds: %s\n", (settings->disable_emergency) ? "Disabled" : "Enabled");
+    settings->use_emergency = val;
+    printf("Emergency leds: %s\n", (settings->use_emergency) ? "Enabled" : "Disabled");
     TO_EXIT_IF_ERROR(settings_write());
     return;
 EXIT:

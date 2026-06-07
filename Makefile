@@ -8,7 +8,6 @@ TOOLS_PATHS+=-Dpicotool_DIR=$(PICO_TOOL_PATH)
 endif
 
 UF2_FILE = $(BUILD_DIR)/$(TARGET).uf2
-PICO_DRIVE = /media/$(USER)/RPI-RP2
 
 MAKEFLAGS += --no-print-directory
 
@@ -23,7 +22,13 @@ assets:
 	@find $(ASSETS_PATH) -type f | while read f; do \
 		out="$(ASSETS_GEN_PATH)/$${f#$(ASSETS_PATH)/}.h"; \
 		mkdir -p "$$(dirname $$out)"; \
-		hexdump -v -e '1/1 "0x%02X, " "\n"' "$$f" > "$$out"; \
+		html-minifier-terser \
+			--collapse-whitespace \
+			--remove-comments \
+			--minify-css true \
+			--minify-js true \
+			"$$f" | \
+		hexdump -v -e '1/1 "0x%02X, " "\n"' > "$$out"; \
 	done
 
 prepare: assets
@@ -38,11 +43,12 @@ clean:
 
 flash: build
 	@echo "Waiting for Raspberry Pi Pico in BOOTSEL mode..."
-	@while [ ! -d "$(PICO_DRIVE)" ]; do \
-		sleep 1 > /dev/null 2>&1;\
+	@while [ -z "$$(lsblk -o LABEL,MOUNTPOINT -nr | awk '$$1=="RPI-RP2" {print $$2}')" ]; do \
+		sleep 1; \
 	done
-	@echo "Pico detected. Flashing..."
-	cp $(UF2_FILE) $(PICO_DRIVE)
+	@PICO_DRIVE="$$(lsblk -o LABEL,MOUNTPOINT -nr | awk '$$1=="RPI-RP2" {print $$2}')"; \
+	echo "Pico detected at $$PICO_DRIVE"; \
+	cp $(UF2_FILE) "$$PICO_DRIVE"
 	@echo "Done!"
 
 run: flash

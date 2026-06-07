@@ -26,13 +26,15 @@ ErrCode settings_init(void) {
     return err;
 }
 
-ErrCode settings_default(void) {
+ErrCode settings_default(bool restart) {
     ErrCode err = ERR_SUCCESS;
     memcpy(&global_settings, &default_settings, sizeof(Settings));
     RETURN_IF_ERROR(settings_write());
-    printf("Device will reboot!\n");
-    sleep_ms(1000);
-    watchdog_reboot(0, 0, 0);
+    if (restart) {
+        printf("Device will reboot!\n");
+        sleep_ms(1000);
+        watchdog_reboot(0, 0, 0);
+    }
     return err;
 }
 

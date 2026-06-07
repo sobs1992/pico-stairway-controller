@@ -77,6 +77,7 @@ inline uint64_t get_time_ms(void) {
 }
 
 int main() {
+    ErrCode err = ERR_SUCCESS;
     bool error_led_state = false;
     StairwaySensorsGet sen_values = {0};
 
@@ -132,7 +133,7 @@ int main() {
             status.sensor_state[i].ts = get_time_ms();
         }
 
-        if ((status.light_state) && (!settings->disable_light_sensor)) {
+        if ((status.light_state) && (settings->use_light_sensor)) {
             if ((status.people_count == 0) && (!status.block_by_light)) {
                 INFO("Block by light (value: %" PRIu32 ")", status.light_value);
                 status.block_by_light = true;
@@ -271,13 +272,13 @@ int main() {
             }
         }
         if (status.sensor_state[STAIRWAY_SENS_UP_FIRST].current) {
-            if ((!status.block_by_light) && (!settings->disable_emergency) &&
+            if ((!status.block_by_light) && (settings->use_emergency) &&
                 ((get_time_ms() - detector_block_ts[DETECTOR_TYPE_UP]) > settings->emergency_block_ms)) {
                 stairway_emergency_leds(EMERGENCY_UP, true);
             }
         }
         if (status.sensor_state[STAIRWAY_SENS_DOWN_FIRST].current) {
-            if ((!status.block_by_light) && (!settings->disable_emergency) &&
+            if ((!status.block_by_light) && (settings->use_emergency) &&
                 ((get_time_ms() - detector_block_ts[DETECTOR_TYPE_DOWN]) > settings->emergency_block_ms)) {
                 stairway_emergency_leds(EMERGENCY_DOWN, true);
             }
@@ -297,7 +298,7 @@ int main() {
 
             if (led_on_up) {
                 if (led_on_up_cnt < settings->led_count) {
-                    if (!settings->disable_emergency) {
+                    if (settings->use_emergency) {
                         for (; led_on_up_cnt < settings->emergency_cnt[EMERGENCY_UP]; led_on_up_cnt++) {
                             stairway_leds_set_state(led_on_up_cnt, true, led_on_up_ts);
                         }
@@ -320,7 +321,7 @@ int main() {
             }
             if (led_on_down) {
                 if (led_on_down_cnt < settings->led_count) {
-                    if (!settings->disable_emergency) {
+                    if (settings->use_emergency) {
                         for (; led_on_down_cnt < settings->emergency_cnt[EMERGENCY_DOWN]; led_on_down_cnt++) {
                             stairway_leds_set_state(settings->led_count - led_on_down_cnt - 1, true, led_on_down_ts);
                         }

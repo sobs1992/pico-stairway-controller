@@ -10,7 +10,7 @@
 typedef struct {
     uint32_t magic;
 
-    bool disable_light_sensor;
+    bool use_light_sensor;
     uint32_t light_sensor_day_value;
     uint32_t light_sensor_night_value;
 
@@ -27,12 +27,12 @@ typedef struct {
     uint8_t led_off_step;
     uint32_t led_count;
 
-    bool disable_emergency;
+    bool use_emergency;
     uint32_t emergency_block_ms;
     uint32_t emergency_cnt[EMERGENCY_MAX];
 } Settings;
 
 ErrCode settings_init(void);
-ErrCode settings_default(void);
+ErrCode settings_default(bool restart);
 Settings *settings_get(void);
 ErrCode settings_write(void);

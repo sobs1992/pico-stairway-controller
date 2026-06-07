@@ -29,6 +29,7 @@ add_executable(main
     network/dns_server/dnsserver.c
     network/http_server/http_server.c
     network/http_server/content.c
+    network/http_server/settings.c
 )
 
 target_compile_options(main PRIVATE -Wall -Werror)

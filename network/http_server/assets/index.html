@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0a0f1e">
-    <title>Leitner Light Control</title>
+    <title>Stairway Controller</title>
     <style>
         * {
             margin: 0;
@@ -74,9 +74,9 @@
         }
 
         .info-grid {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 16px;
-            flex-wrap: wrap;
         }
 
         .info-card {
@@ -130,10 +130,9 @@
         }
 
         .setting-row {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 16px;
-            margin-bottom: 16px;
         }
 
         .setting-item {
@@ -254,21 +253,6 @@
             color: #00d2ff;
         }
 
-        /* Чекбокс Swap */
-        .swap-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 12px;
-            padding: 10px 0;
-        }
-
-        .swap-checkbox input {
-            width: 20px;
-            height: 20px;
-            accent-color: #00d2ff;
-        }
-
         button {
             background: #00d2ff;
             border: none;
@@ -324,24 +308,79 @@
             display: none;
         }
 
-        @media (max-width: 500px) {
-            body { padding: 16px 12px 100px; }
-            .info-value { font-size: 1.6rem; }
+        /* ===== Mobile ===== */
+        @media (max-width: 600px) {
+            body {
+                padding: 12px 10px 120px;
+            }
+            h1 {
+                font-size: 1.4rem;
+            }
+            .app-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            .info-grid {
+                flex-direction: column;
+            }
+            .info-card {
+                width: 100%;
+            }
+            .setting-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .setting-item {
+                min-width: unset;
+                width: 100%;
+            }
+            .card {
+                padding: 16px;
+                border-radius: 20px;
+            }
+            .card-header {
+                margin-bottom: 14px;
+            }
+            .card-header h2 {
+                font-size: 1rem;
+            }
+            input,
+            select,
+            button {
+                font-size: 16px; /* чтобы iPhone не зумил поле */
+            }
+            .range-value {
+                display: inline-block;
+                margin-top: 6px;
+                margin-left: 0;
+            }
+            .action-buttons {
+                position: static;
+                margin-top: 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .action-buttons button {
+                width: 100%;
+            }
+            .status {
+                bottom: 20px;
+            }
         }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="app-header">
-        <h1>Leitner Light</h1>
-        <span>stairs v2.0</span>
+        <h1>Контроллер лестницы</h1>
     </div>
 
-    <!-- Инфо панель -->
     <div class="info-panel">
         <div class="info-grid">
             <div class="info-card">
-                <div class="info-label">👥 На лестнице</div>
+                <div class="info-label">👥 Человек на лестнице</div>
                 <div class="info-value" id="peopleCount">0</div>
             </div>
             <div class="info-card">
@@ -352,7 +391,6 @@
     </div>
 
     <form id="settingsForm">
-        <!-- Датчик освещённости -->
         <div class="card">
             <div class="card-header"><h2>🌞 Датчик освещённости</h2></div>
             <label class="toggle-switch">
@@ -373,7 +411,6 @@
             </div>
         </div>
 
-        <!-- Сенсоры с checkbox swap -->
         <div class="card">
             <div class="card-header"><h2>🔄 Сенсоры движения</h2></div>
 
@@ -384,17 +421,22 @@
                     <div class="setting-item"><label>Сенсор A (mm)</label><input type="range" id="bottomSensorA" min="0" max="4000"><span id="bottomSensorAValue" class="range-value">50</span></div>
                     <div class="setting-item"><label>Сенсор B (mm)</label><input type="range" id="bottomSensorB" min="0" max="4000"><span id="bottomSensorBValue" class="range-value">50</span></div>
                 </div>
-                <label class="swap-checkbox"><input type="checkbox" id="swapBottomCheckbox"> <span>🔄 Поменять местами A и B (отправка на сервер)</span></label>
+                <label class="toggle-switch">
+                    <span>🔄 Поменять местами сенсоры A и B</span>
+                    <input type="checkbox" id="swapBottomCheckbox">
+                </label>
             </div>
 
-            <!-- Сверху -->
             <div>
                 <h3 style="color:#ffaa66; margin-bottom: 10px;">⬆️ Сенсоры сверху</h3>
                 <div class="setting-row">
                     <div class="setting-item"><label>Сенсор A (mm)</label><input type="range" id="topSensorA" min="0" max="4000"><span id="topSensorAValue" class="range-value">50</span></div>
                     <div class="setting-item"><label>Сенсор B (mm)</label><input type="range" id="topSensorB" min="0" max="4000"><span id="topSensorBValue" class="range-value">50</span></div>
                 </div>
-                <label class="swap-checkbox"><input type="checkbox" id="swapTopCheckbox"> <span>🔄 Поменять местами A и B (отправка на сервер)</span></label>
+                <label class="toggle-switch">
+                    <span>🔄 Поменять местами сенсоры A и B</span>
+                    <input type="checkbox" id="swapTopCheckbox">
+                </label>
             </div>
 
             <div class="setting-item" style="margin-top: 16px;">
@@ -403,7 +445,6 @@
             </div>
         </div>
 
-        <!-- LED -->
         <div class="card">
             <div class="card-header"><h2>💡 LED подсветка</h2></div>
             <div class="setting-row">
@@ -421,19 +462,19 @@
             </div>
         </div>
 
-        <!-- Дежурный режим -->
         <div class="card">
             <div class="card-header"><h2>🛋️ Дежурный режим</h2></div>
             <label class="toggle-switch"><span>Использовать</span><input type="checkbox" id="standbyEnabled"></label>
             <div id="standbySettings">
-                <div class="setting-row"><div class="setting-item"><label>⬇️ Снизу</label><input type="number" id="standbyStepsBottom" value="2"></div><div class="setting-item"><label>⬆️ Сверху</label><input type="number" id="standbyStepsTop" value="2"></div></div>
-                <div class="setting-item"><label>⏱️ Задержка (мин)</label><input type="number" id="standbyDelay" value="5"></div>
+                <div class="setting-row"><div class="setting-item"><label>⬇️ LED Снизу</label><input type="number" id="standbyStepsBottom" value="2"></div><div class="setting-item"><label>⬆️ LED Сверху</label><input type="number" id="standbyStepsTop" value="2"></div></div>
+                <div class="setting-item"><label>⏱️ Задержка (мс)</label><input type="number" id="standbyDelay" value="5"></div>
             </div>
         </div>
 
         <div class="action-buttons">
-            <button type="submit" style="flex:2">💾 Сохранить</button>
-            <button type="button" class="btn-outline" onclick="resetToDefaults()">🔄 Сброс</button>
+            <button type="button" id="saveBtn" style="flex:2">💾 Сохранить</button>
+            <button type="button" id="defaultBtn" style="flex:2">🔄 Сброс настроек</button>
+            <button type="button" id="restartBtn" style="flex:2">🔁 Перезагрузка</button>
         </div>
     </form>
 </div>
@@ -443,19 +484,6 @@
     const PICO_URL = `http://${window.location.hostname}`;
     let updateInterval = null;
 
-    const defaultSettings = {
-        lightSensorEnabled: false,
-        dayThreshold:500, nightThreshold:200,
-        bottomSensorA:50, bottomSensorB:50, topSensorA:50, topSensorB:50,
-        swapBottom: false, swapTop: false,
-        sensorDelay:100,
-        ledCount:10, ledDelay:50, ledTimeout:30,
-        brightnessOn:100, brightnessOff:10,
-        pwmStepUp:5, pwmStepDown:5,
-        standbyEnabled:false,
-        standbyStepsBottom:2, standbyStepsTop:2, standbyDelay:5
-    };
-
     function showStatus(msg, type='success'){
         const st = document.getElementById('status');
         st.textContent = msg;
@@ -464,7 +492,6 @@
         setTimeout(()=>{ st.style.display='none'; }, 2500);
     }
 
-    // Загрузка информации с JSON
     async function loadInfo(){
         try{
             const resp = await fetch(`${PICO_URL}/api/info`);
@@ -475,51 +502,51 @@
         }catch(e){}
     }
 
-    // Загрузка настроек GET /api/settings
     async function loadSettings(){
         try{
             const resp = await fetch(`${PICO_URL}/api/settings`);
             if(!resp.ok) throw new Error();
             const s = await resp.json();
             document.getElementById('lightSensorEnabled').checked = !!s.lightSensorEnabled;
-            document.getElementById('dayThreshold').value = s.dayThreshold??500;
-            document.getElementById('dayThresholdValue').innerText = s.dayThreshold??500;
-            document.getElementById('nightThreshold').value = s.nightThreshold??200;
-            document.getElementById('nightThresholdValue').innerText = s.nightThreshold??200;
+            document.getElementById('dayThreshold').value = s.dayThreshold??0;
+            document.getElementById('dayThresholdValue').innerText = s.dayThreshold??0;
+            document.getElementById('nightThreshold').value = s.nightThreshold??0;
+            document.getElementById('nightThresholdValue').innerText = s.nightThreshold??0;
 
-            document.getElementById('bottomSensorA').value = s.bottomSensorA??50;
-            document.getElementById('bottomSensorAValue').innerText = s.bottomSensorA??50;
-            document.getElementById('bottomSensorB').value = s.bottomSensorB??50;
-            document.getElementById('bottomSensorBValue').innerText = s.bottomSensorB??50;
-            document.getElementById('swapBottomCheckbox').checked = !!s.swapBottom;
-            document.getElementById('topSensorA').value = s.topSensorA??50;
-            document.getElementById('topSensorAValue').innerText = s.topSensorA??50;
-            document.getElementById('topSensorB').value = s.topSensorB??50;
-            document.getElementById('topSensorBValue').innerText = s.topSensorB??50;
-            document.getElementById('swapTopCheckbox').checked = !!s.swapTop;
+            document.getElementById('bottomSensorA').value = s.bottomSensorA??0;
+            document.getElementById('bottomSensorAValue').innerText = s.bottomSensorA??0;
+            document.getElementById('bottomSensorB').value = s.bottomSensorB??0;
+            document.getElementById('bottomSensorBValue').innerText = s.bottomSensorB??0;
+            document.getElementById('swapBottomCheckbox').checked = !!s.swapBottomCheckbox;
+            document.getElementById('topSensorA').value = s.topSensorA??0;
+            document.getElementById('topSensorAValue').innerText = s.topSensorA??0;
+            document.getElementById('topSensorB').value = s.topSensorB??0;
+            document.getElementById('topSensorBValue').innerText = s.topSensorB??0;
+            document.getElementById('swapTopCheckbox').checked = !!s.swapTopCheckbox;
 
-            document.getElementById('sensorDelay').value = s.sensorDelay??100;
-            document.getElementById('ledCount').value = s.ledCount??10;
-            document.getElementById('ledDelay').value = s.ledDelay??50;
-            document.getElementById('ledTimeout').value = s.ledTimeout??30;
-            document.getElementById('brightnessOn').value = s.brightnessOn??100;
-            document.getElementById('brightnessOnValue').innerText = s.brightnessOn??100;
-            document.getElementById('brightnessOff').value = s.brightnessOff??10;
-            document.getElementById('brightnessOffValue').innerText = s.brightnessOff??10;
-            document.getElementById('pwmStepUp').value = s.pwmStepUp??5;
-            document.getElementById('pwmStepDown').value = s.pwmStepDown??5;
+            document.getElementById('sensorDelay').value = s.sensorDelay??0;
+            document.getElementById('ledCount').value = s.ledCount??0;
+            document.getElementById('ledDelay').value = s.ledDelay??0;
+            document.getElementById('ledTimeout').value = s.ledTimeout??0;
+            document.getElementById('brightnessOn').value = s.brightnessOn??0;
+            document.getElementById('brightnessOnValue').innerText = s.brightnessOn??0;
+            document.getElementById('brightnessOff').value = s.brightnessOff??0;
+            document.getElementById('brightnessOffValue').innerText = s.brightnessOff??0;
+            document.getElementById('pwmStepUp').value = s.pwmStepUp??0;
+            document.getElementById('pwmStepDown').value = s.pwmStepDown??0;
             document.getElementById('standbyEnabled').checked = !!s.standbyEnabled;
-            document.getElementById('standbyStepsBottom').value = s.standbyStepsBottom??2;
-            document.getElementById('standbyStepsTop').value = s.standbyStepsTop??2;
-            document.getElementById('standbyDelay').value = s.standbyDelay??5;
+            document.getElementById('standbyStepsBottom').value = s.standbyStepsBottom??0;
+            document.getElementById('standbyStepsTop').value = s.standbyStepsTop??0;
+            document.getElementById('standbyDelay').value = s.standbyDelay??0;
 
             document.getElementById('lightSettings').style.opacity = s.lightSensorEnabled ? '1' : '0.4';
             document.getElementById('standbySettings').style.opacity = s.standbyEnabled ? '1' : '0.4';
+            document.getElementById('swapBottom').style.opacity = s.swapBottomCheckbox ? '1' : '0.4';
+            document.getElementById('swapTop').style.opacity = s.swapTopCheckbox ? '1' : '0.4';
             showStatus('Настройки загружены');
         }catch(e){ showStatus('Ошибка загрузки настроек','error');}
     }
 
-    // POST /api/settings
     async function saveSettings(settings){
         try{
             const resp = await fetch(`${PICO_URL}/api/settings`,{
@@ -533,6 +560,65 @@
         }catch(e){ showStatus('❌ Ошибка сохранения','error'); return false; }
     }
 
+    async function resetSettings(){
+        try{
+            const resp = await fetch(`${PICO_URL}/api/reset`,{
+                method:'POST',
+                headers:{'Content-Type':'application/json'}
+            });
+            if(!resp.ok) throw new Error();
+            loadSettings();
+            showStatus('✅ Настройки сброшены успешно');
+            return true;
+        }catch(e){ showStatus('❌ Ошибка сброса','error'); return false; }
+    }
+
+    function showRestarting() {
+        const st = document.getElementById('status');
+
+        st.innerHTML = `
+            🔄 Устройство перезагружается...<br>
+            ⏳ Подождите 5-15 секунд и обновите страницу
+        `;
+
+        st.style.display = 'block';
+        st.style.borderLeftColor = '#ffaa66';
+
+        document.querySelectorAll('button').forEach(btn => {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+        });
+    }
+
+    async function waitForDevice() {
+        try {
+            const resp = await fetch(`${PICO_URL}/api/info?t=${Date.now()}`);
+
+            if (resp.ok) {
+                showStatus('✅ Устройство снова доступно');
+                location.reload();
+                return;
+            }
+        } catch(e) {
+        }
+
+        setTimeout(waitForDevice, 1000);
+    }
+
+    async function restartDevice(){
+        try{
+            showRestarting();
+            fetch(`${PICO_URL}/api/restart`, {
+                method: 'POST',
+                keepalive: true
+            });
+
+            setTimeout(waitForDevice, 3000);
+        }catch(e){
+            showStatus('Ошибка перезагрузки', 'error');
+        }
+    }
+
     function getCurrentSettings(){
         return {
             lightSensorEnabled: document.getElementById('lightSensorEnabled').checked,
@@ -540,10 +626,10 @@
             nightThreshold: parseInt(document.getElementById('nightThreshold').value),
             bottomSensorA: parseInt(document.getElementById('bottomSensorA').value),
             bottomSensorB: parseInt(document.getElementById('bottomSensorB').value),
-            swapBottom: document.getElementById('swapBottomCheckbox').checked,
+            swapBottomCheckbox: document.getElementById('swapBottomCheckbox').checked,
             topSensorA: parseInt(document.getElementById('topSensorA').value),
             topSensorB: parseInt(document.getElementById('topSensorB').value),
-            swapTop: document.getElementById('swapTopCheckbox').checked,
+            swapTopCheckbox: document.getElementById('swapTopCheckbox').checked,
             sensorDelay: parseInt(document.getElementById('sensorDelay').value),
             ledCount: parseInt(document.getElementById('ledCount').value),
             ledDelay: parseInt(document.getElementById('ledDelay').value),
@@ -559,35 +645,16 @@
         };
     }
 
-    window.resetToDefaults = function(){
-        const d = defaultSettings;
-        document.getElementById('lightSensorEnabled').checked = d.lightSensorEnabled;
-        document.getElementById('dayThreshold').value = d.dayThreshold; document.getElementById('dayThresholdValue').innerText = d.dayThreshold;
-        document.getElementById('nightThreshold').value = d.nightThreshold; document.getElementById('nightThresholdValue').innerText = d.nightThreshold;
-        document.getElementById('bottomSensorA').value = d.bottomSensorA; document.getElementById('bottomSensorAValue').innerText = d.bottomSensorA;
-        document.getElementById('bottomSensorB').value = d.bottomSensorB; document.getElementById('bottomSensorBValue').innerText = d.bottomSensorB;
-        document.getElementById('swapBottomCheckbox').checked = d.swapBottom;
-        document.getElementById('topSensorA').value = d.topSensorA; document.getElementById('topSensorAValue').innerText = d.topSensorA;
-        document.getElementById('topSensorB').value = d.topSensorB; document.getElementById('topSensorBValue').innerText = d.topSensorB;
-        document.getElementById('swapTopCheckbox').checked = d.swapTop;
-        document.getElementById('sensorDelay').value = d.sensorDelay;
-        document.getElementById('ledCount').value = d.ledCount;
-        document.getElementById('ledDelay').value = d.ledDelay;
-        document.getElementById('ledTimeout').value = d.ledTimeout;
-        document.getElementById('brightnessOn').value = d.brightnessOn; document.getElementById('brightnessOnValue').innerText = d.brightnessOn;
-        document.getElementById('brightnessOff').value = d.brightnessOff; document.getElementById('brightnessOffValue').innerText = d.brightnessOff;
-        document.getElementById('pwmStepUp').value = d.pwmStepUp;
-        document.getElementById('pwmStepDown').value = d.pwmStepDown;
-        document.getElementById('standbyEnabled').checked = d.standbyEnabled;
-        document.getElementById('standbyStepsBottom').value = d.standbyStepsBottom;
-        document.getElementById('standbyStepsTop').value = d.standbyStepsTop;
-        document.getElementById('standbyDelay').value = d.standbyDelay;
-        showStatus('Сброшено к стандарту');
-    };
-
-    document.getElementById('settingsForm').addEventListener('submit', async(e)=>{
-        e.preventDefault();
+    document.getElementById('saveBtn').addEventListener('click', async(e)=>{
         await saveSettings(getCurrentSettings());
+    });
+
+    document.getElementById('defaultBtn').addEventListener('click', async(e)=>{
+        await resetSettings();
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', async(e)=>{
+        await restartDevice();
     });
 
     function initRanges(){

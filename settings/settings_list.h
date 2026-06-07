@@ -1,9 +1,9 @@
 static const Settings default_settings = {
     .magic = 0xDEADBEEF,
-    .disable_light_sensor = false,
+    .use_light_sensor = true,
     .light_sensor_day_value = 1400,
     .light_sensor_night_value = 1200,
-    .disable_emergency = false,
+    .use_emergency = true,
     .dist_trigger =
         {
             [STAIRWAY_SENS_UP_FIRST] = 100,

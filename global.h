@@ -41,37 +41,43 @@ typedef enum {
 
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
 
-#define RETURN_IF_ERROR(err)                                                                                           \
+#define RETURN_IF_ERROR(err_code)                                                                                      \
+    err = err_code;                                                                                                    \
     if (err != ERR_SUCCESS) {                                                                                          \
         INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
         return err;                                                                                                    \
     }
 
-#define RETURN_IF_ERROR_(err)                                                                                          \
+#define RETURN_IF_ERROR_(err_code)                                                                                     \
+    err = err_code;                                                                                                    \
     if (err != ERR_SUCCESS) {                                                                                          \
         return err;                                                                                                    \
     }
 
-#define RETURN_IF_COND(cond, err)                                                                                      \
+#define RETURN_IF_COND(cond, err_code)                                                                                 \
     if (cond) {                                                                                                        \
+        err = err_code;                                                                                                \
         if (err != ERR_SUCCESS) {                                                                                      \
             INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                       \
         }                                                                                                              \
         return err;                                                                                                    \
     }
 
-#define RETURN_IF_COND_(cond, err)                                                                                     \
+#define RETURN_IF_COND_(cond, err_code)                                                                                \
     if (cond) {                                                                                                        \
+        err = err_code;                                                                                                \
         return err;                                                                                                    \
     }
 
-#define TO_EXIT_IF_ERROR(err)                                                                                          \
+#define TO_EXIT_IF_ERROR(err_code)                                                                                     \
+    err = err_code;                                                                                                    \
     if (err != ERR_SUCCESS) {                                                                                          \
         INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
         goto EXIT;                                                                                                     \
     }
 
-#define TO_EXIT_IF_ERROR_(err)                                                                                         \
+#define TO_EXIT_IF_ERROR_(err_code)                                                                                    \
+    err = err_code;                                                                                                    \
     if (err != ERR_SUCCESS) {                                                                                          \
         goto EXIT;                                                                                                     \
     }
@@ -89,7 +95,8 @@ typedef enum {
         goto EXIT;                                                                                                     \
     }
 
-#define LOG_IF_ERROR(err)                                                                                              \
+#define LOG_IF_ERROR(err_code)                                                                                         \
+    err = err_code;                                                                                                    \
     if (err != ERR_SUCCESS) {                                                                                          \
         INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
     }
