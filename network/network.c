@@ -122,3 +122,7 @@ ErrCode net_ap_set_state(bool en) {
 
     return err;
 }
+
+bool net_ap_get_state(void) {
+    return ap_started;
+}

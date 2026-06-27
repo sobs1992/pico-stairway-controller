@@ -11,6 +11,7 @@
 #include "api/cli_api.h"
 #include "api/commands_api.h"
 #include "api/settings_api.h"
+#include "api/button_api.h"
 #include <tusb.h>
 #include "hardware/watchdog.h"
 #include "api/network_api.h"
@@ -18,6 +19,9 @@
 
 #define WS281x_PIN       3
 #define LIGHT_SENSOR_PIN 0
+
+#define BUTTON_POLL_PERIOD  500
+#define BUTTON_DEBOUNCE_CNT 3
 
 static const char *detector_name[DETECTOR_TYPE_MAX] = {
     [DETECTOR_TYPE_UP] = "UP",
@@ -101,11 +105,36 @@ int main() {
     commands_init();
 
     LOG_IF_ERROR(net_ap_init(settings->ssid, settings->pass));
-    LOG_IF_ERROR(net_ap_set_state(true));
 
     while (1) {
         watchdog_update();
         net_poll();
+        uint64_t ts = get_time_ms();
+
+        static uint64_t button_prev_ts = 0;
+        static uint32_t button_debounce = 0;
+        static bool button_state = false;
+        bool button_press_event = false;
+        if ((ts - button_prev_ts) > BUTTON_POLL_PERIOD) {
+            button_prev_ts = ts;
+            if (get_bootsel_button()) {
+                if (button_debounce < BUTTON_DEBOUNCE_CNT) {
+                    button_debounce++;
+                } else {
+                    if (!button_state) {
+                        button_state = true;
+                        button_press_event = true;
+                        button_debounce = 0;
+                    }
+                }
+            } else {
+                button_debounce = 0;
+                button_state = false;
+            }
+        }
+        if (button_press_event) {
+            LOG_IF_ERROR(net_ap_set_state(!net_ap_get_state()));
+        }
 
         error_led_state = false;
         if (tud_cdc_available()) {
@@ -284,7 +313,6 @@ int main() {
             }
         }
 
-        uint64_t ts = get_time_ms();
         if ((ts - prev_ts) > settings->leds_time_interval) {
             prev_ts = ts;
 
@@ -352,11 +380,11 @@ int main() {
         }
 
         static uint64_t led_error_ts = 0;
-        if (error_led_state) {
+        if ((error_led_state) && ((get_time_ms() - led_error_ts) > 1000)) {
             led_error_ts = get_time_ms();
-            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-        } else if ((get_time_ms() - led_error_ts) > 1000) {
-            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, !net_ap_get_state());
+        } else if ((get_time_ms() - led_error_ts) > 500) {
+            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, net_ap_get_state());
         }
     }
     return 0;

@@ -54,8 +54,9 @@ static void get_status(EmbeddedCli *cli, char *args, void *context) {
            settings->emergency_cnt[EMERGENCY_UP], settings->emergency_cnt[EMERGENCY_DOWN],
            settings->emergency_block_ms);
 
-    printf("SSID: %s\n"
-           "PASS: %s\n",
+    printf("WiFi AP: %s\n", (net_ap_get_state()) ? "Started" : "Stopped");
+    printf("\tSSID: %s\n"
+           "\tPASS: %s\n",
            settings->ssid, settings->pass);
 }
 

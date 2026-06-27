@@ -23,6 +23,7 @@ add_executable(main
     light_sensor/light_sensor.c
     settings/settings.c
     commands/commands.c
+    button/button.c
     cli/cli.c
     network/network.c
     network/dhcp_server/dhcpserver.c
@@ -43,6 +44,7 @@ target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/light_sensor
     ${CMAKE_CURRENT_LIST_DIR}/settings
     ${CMAKE_CURRENT_LIST_DIR}/commands
+    ${CMAKE_CURRENT_LIST_DIR}/button
     ${CMAKE_CURRENT_LIST_DIR}/cli
     ${CMAKE_CURRENT_LIST_DIR}/network
     ${CMAKE_CURRENT_LIST_DIR}/network/dhcp_server
