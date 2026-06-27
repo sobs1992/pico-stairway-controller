@@ -14,6 +14,7 @@ typedef enum {
     STYPE_UINT16,
     STYPE_UINT8,
     STYPE_BOOL,
+    STYPE_STRING,
     STYPE_MAX,
 } SettingsType;
 
@@ -21,35 +22,63 @@ typedef struct {
     const char *name;
     const SettingsType type;
     size_t offset;
+    const uint32_t max_len; // relevant for STYPE_STRING only
 } SettingsMap;
 
 static const SettingsMap settings_map[] = {
-    {.name = "lightSensorEnabled", .type = STYPE_BOOL, .offset = offsetof(Settings, use_light_sensor)},
-    {.name = "dayThreshold", .type = STYPE_UINT32, .offset = offsetof(Settings, light_sensor_day_value)},
-    {.name = "nightThreshold", .type = STYPE_UINT32, .offset = offsetof(Settings, light_sensor_night_value)},
-    {.name = "bottomSensorA",
+    {.name = "use_light_sensor", .type = STYPE_BOOL, .offset = offsetof(Settings, use_light_sensor)},
+    {.name = "light_sensor_day", .type = STYPE_UINT32, .offset = offsetof(Settings, light_sensor_day_value)},
+    {.name = "light_sensor_night", .type = STYPE_UINT32, .offset = offsetof(Settings, light_sensor_night_value)},
+    {.name = "dist_trigger_down_first",
      .type = STYPE_UINT16,
      .offset = offsetof(Settings, dist_trigger[STAIRWAY_SENS_DOWN_FIRST])},
-    {.name = "bottomSensorB",
+    {.name = "dist_trigger_down_second",
      .type = STYPE_UINT16,
      .offset = offsetof(Settings, dist_trigger[STAIRWAY_SENS_DOWN_SECOND])},
-    {.name = "swapBottomCheckbox", .type = STYPE_BOOL, .offset = offsetof(Settings, sensor_down_swap)},
-    {.name = "topSensorA", .type = STYPE_UINT16, .offset = offsetof(Settings, dist_trigger[STAIRWAY_SENS_UP_FIRST])},
-    {.name = "topSensorB", .type = STYPE_UINT16, .offset = offsetof(Settings, dist_trigger[STAIRWAY_SENS_UP_SECOND])},
-    {.name = "swapTopCheckbox", .type = STYPE_BOOL, .offset = offsetof(Settings, sensor_up_swap)},
-    {.name = "sensorDelay", .type = STYPE_UINT32, .offset = offsetof(Settings, sensor_debouce_time)},
-    {.name = "ledCount", .type = STYPE_UINT32, .offset = offsetof(Settings, led_count)},
-    {.name = "ledDelay", .type = STYPE_UINT32, .offset = offsetof(Settings, leds_time_interval)},
-    {.name = "ledTimeout", .type = STYPE_UINT32, .offset = offsetof(Settings, leds_off_timeout)},
-    {.name = "brightnessOn", .type = STYPE_UINT8, .offset = offsetof(Settings, led_on_value)},
-    {.name = "brightnessOff", .type = STYPE_UINT8, .offset = offsetof(Settings, led_off_value)},
-    {.name = "pwmStepUp", .type = STYPE_UINT8, .offset = offsetof(Settings, led_on_step)},
-    {.name = "pwmStepDown", .type = STYPE_UINT8, .offset = offsetof(Settings, led_off_step)},
-    {.name = "standbyEnabled", .type = STYPE_BOOL, .offset = offsetof(Settings, use_emergency)},
-    {.name = "standbyStepsBottom", .type = STYPE_UINT32, .offset = offsetof(Settings, emergency_cnt[EMERGENCY_DOWN])},
-    {.name = "standbyStepsTop", .type = STYPE_UINT32, .offset = offsetof(Settings, emergency_cnt[EMERGENCY_UP])},
-    {.name = "standbyDelay", .type = STYPE_UINT32, .offset = offsetof(Settings, emergency_block_ms)},
+    {.name = "sensor_down_swap", .type = STYPE_BOOL, .offset = offsetof(Settings, sensor_down_swap)},
+    {.name = "dist_trigger_up_first",
+     .type = STYPE_UINT16,
+     .offset = offsetof(Settings, dist_trigger[STAIRWAY_SENS_UP_FIRST])},
+    {.name = "dist_trigger_up_second",
+     .type = STYPE_UINT16,
+     .offset = offsetof(Settings, dist_trigger[STAIRWAY_SENS_UP_SECOND])},
+    {.name = "sensor_up_swap", .type = STYPE_BOOL, .offset = offsetof(Settings, sensor_up_swap)},
+    {.name = "sensor_debouce_time", .type = STYPE_UINT32, .offset = offsetof(Settings, sensor_debouce_time)},
+    {.name = "led_count", .type = STYPE_UINT32, .offset = offsetof(Settings, led_count)},
+    {.name = "leds_time_interval", .type = STYPE_UINT32, .offset = offsetof(Settings, leds_time_interval)},
+    {.name = "leds_off_timeout", .type = STYPE_UINT32, .offset = offsetof(Settings, leds_off_timeout)},
+    {.name = "led_on_value", .type = STYPE_UINT8, .offset = offsetof(Settings, led_on_value)},
+    {.name = "led_off_value", .type = STYPE_UINT8, .offset = offsetof(Settings, led_off_value)},
+    {.name = "led_on_step", .type = STYPE_UINT8, .offset = offsetof(Settings, led_on_step)},
+    {.name = "led_off_step", .type = STYPE_UINT8, .offset = offsetof(Settings, led_off_step)},
+    {.name = "use_emergency", .type = STYPE_BOOL, .offset = offsetof(Settings, use_emergency)},
+    {.name = "emergency_cnt_down", .type = STYPE_UINT32, .offset = offsetof(Settings, emergency_cnt[EMERGENCY_DOWN])},
+    {.name = "emergency_cnt_up", .type = STYPE_UINT32, .offset = offsetof(Settings, emergency_cnt[EMERGENCY_UP])},
+    {.name = "emergency_block_ms", .type = STYPE_UINT32, .offset = offsetof(Settings, emergency_block_ms)},
+    {.name = "wifi_ssid", .type = STYPE_STRING, .offset = offsetof(Settings, ssid), .max_len = SSID_MAX_LEN},
+    {.name = "wifi_pass", .type = STYPE_STRING, .offset = offsetof(Settings, pass), .max_len = PASS_MAX_LEN},
 };
+
+static ErrCode jsonFindString(const char *in, const char *key, char *value, uint32_t buf_size) {
+    ErrCode err = ERR_SUCCESS;
+
+    RETURN_IF_COND(in == NULL, ERR_PARAM_IS_NULL);
+    RETURN_IF_COND(key == NULL, ERR_PARAM_IS_NULL);
+    RETURN_IF_COND(value == NULL, ERR_PARAM_IS_NULL);
+
+    char *start = strstr(in, key);
+    RETURN_IF_COND(start == NULL, ERR_FAIL);
+    char *div = strchr(start, ':');
+    char *val_start = div + 2;
+    char *val_end = strpbrk(val_start, "\"\r\n,}\0");
+    RETURN_IF_COND(val_end == NULL, ERR_FAIL);
+    int len = val_end - val_start;
+    RETURN_IF_COND(len >= buf_size, ERR_FAIL);
+    memcpy(value, val_start, len);
+    value[len] = '\0';
+
+    return err;
+}
 
 static ErrCode jsonFindBool(const char *in, const char *key, bool *value) {
     ErrCode err = ERR_SUCCESS;
@@ -161,6 +190,13 @@ ErrCode get_settings_json(char *buf, uint32_t buf_size) {
                 RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
                 strcat(buf, tmp);
                 break;
+            case STYPE_STRING:
+                snprintf(tmp, sizeof(tmp), "\"%s\":\"%s\"", settings_map[i].name,
+                         ((char *)(p_settings + settings_map[i].offset)));
+                json_size += strlen(tmp);
+                RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
+                strcat(buf, tmp);
+                break;
             default:
                 LOG_IF_ERROR(ERR_FAIL);
                 break;
@@ -201,6 +237,10 @@ ErrCode set_settings_json(char *buf, uint32_t buf_size) {
                 break;
             case STYPE_BOOL:
                 LOG_IF_ERROR(jsonFindBool(buf, settings_map[i].name, (bool *)(p_settings + settings_map[i].offset)));
+                break;
+            case STYPE_STRING:
+                LOG_IF_ERROR(jsonFindString(buf, settings_map[i].name, (char *)(p_settings + settings_map[i].offset),
+                                            settings_map[i].max_len));
                 break;
             default:
                 LOG_IF_ERROR(ERR_FAIL);

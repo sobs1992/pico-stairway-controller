@@ -29,7 +29,7 @@ ErrCode light_sensor_get_data(bool *state, uint32_t *raw) {
     ErrCode err = ERR_SUCCESS;
 
     uint16_t adc = adc_read();
-    if (filtered_adc != UINT32_MAX) {
+    if (filtered_adc != INT32_MAX) {
         filtered_adc += ((int32_t)adc - filtered_adc) / FILTER_N;
     } else {
         filtered_adc = adc;

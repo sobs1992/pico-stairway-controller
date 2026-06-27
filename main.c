@@ -100,7 +100,7 @@ int main() {
 
     commands_init();
 
-    LOG_IF_ERROR(net_ap_init("sobs", "12345678"));
+    LOG_IF_ERROR(net_ap_init(settings->ssid, settings->pass));
     LOG_IF_ERROR(net_ap_set_state(true));
 
     while (1) {

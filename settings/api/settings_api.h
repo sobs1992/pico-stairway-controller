@@ -7,6 +7,9 @@
 #define FLASH_SIZE      2 * 1024 * 1024
 #define SETTINGS_OFFSET (FLASH_SIZE - FLASH_SECTOR_SIZE)
 
+#define SSID_MAX_LEN 11 /* 10 chars + '\0' */
+#define PASS_MAX_LEN 11 /* 10 chars + '\0' */
+
 typedef struct {
     uint32_t magic;
 
@@ -30,6 +33,9 @@ typedef struct {
     bool use_emergency;
     uint32_t emergency_block_ms;
     uint32_t emergency_cnt[EMERGENCY_MAX];
+
+    char ssid[SSID_MAX_LEN];
+    char pass[PASS_MAX_LEN];
 } Settings;
 
 ErrCode settings_init(void);

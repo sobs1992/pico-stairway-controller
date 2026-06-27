@@ -1,6 +1,7 @@
 #define FILE_ID "CM01"
 
 #include <stdlib.h>
+#include <string.h>
 #include <inttypes.h>
 #include "api/commands_api.h"
 #include "api/settings_api.h"
@@ -52,6 +53,10 @@ static void get_status(EmbeddedCli *cli, char *args, void *context) {
            "\tEmergency block: %" PRIu32 " ms\n",
            settings->emergency_cnt[EMERGENCY_UP], settings->emergency_cnt[EMERGENCY_DOWN],
            settings->emergency_block_ms);
+
+    printf("SSID: %s\n"
+           "PASS: %s\n",
+           settings->ssid, settings->pass);
 }
 
 static void set_default(EmbeddedCli *cli, char *args, void *context) {
@@ -371,6 +376,42 @@ EXIT:
     return;
 }
 
+static void set_wifi_ssid(EmbeddedCli *cli, char *args, void *context) {
+    ErrCode err = ERR_SUCCESS;
+    uint8_t count = embeddedCliGetTokenCount(args);
+    TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
+    const char *val = embeddedCliGetToken(args, 1);
+    INFO("%s", val);
+    if (strlen(val) > (sizeof(settings->ssid) - 1)) {
+        printf("Invalid argument. Max SSID length must be %u symbols\n", sizeof(settings->ssid) - 1);
+        return;
+    }
+    strcpy(settings->ssid, val);
+    INFO("Need to restart device to apply new WiFi settings");
+    return;
+EXIT:
+    printf("Invalid argument\n");
+    return;
+}
+
+static void set_wifi_pass(EmbeddedCli *cli, char *args, void *context) {
+    ErrCode err = ERR_SUCCESS;
+    uint8_t count = embeddedCliGetTokenCount(args);
+    TO_EXIT_IF_COND(count != 1, ERR_PARAM_INVALID);
+    const char *val = embeddedCliGetToken(args, 1);
+    INFO("%s", val);
+    if (strlen(val) > (sizeof(settings->pass) - 1)) {
+        printf("Invalid argument. Max PASS length must be %u symbols\n", sizeof(settings->ssid) - 1);
+        return;
+    }
+    strcpy(settings->pass, val);
+    INFO("Need to restart device to apply new WiFi settings");
+    return;
+EXIT:
+    printf("Invalid argument\n");
+    return;
+}
+
 ErrCode commands_init(void) {
     ErrCode err = ERR_SUCCESS;
 
@@ -412,6 +453,8 @@ ErrCode commands_init(void) {
     cli_add_command("em_down_cnt", "Set emergency DOWN leds count (arg0: value)", set_emergency_down_cnt);
 
     cli_add_command("wifi", "Set wifi state (arg0: 0 - wifi off, 1 - wifi on)", set_wifi_state);
+    cli_add_command("ssid", "Set wifi SSID (arg0: SSID string)", set_wifi_ssid);
+    cli_add_command("pass", "Set wifi PASS (arg0: PASS string)", set_wifi_pass);
 
     return err;
 }

@@ -27,4 +27,7 @@ static const Settings default_settings = {
     .led_count = 18,
     .sensor_up_swap = false,
     .sensor_down_swap = true,
+
+    .ssid = "Stairway",
+    .pass = "12345678",
 };

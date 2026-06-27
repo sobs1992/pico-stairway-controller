@@ -19,7 +19,7 @@
 #define JSON_RESPONSE_HEADER                                                                                           \
     "HTTP/1.1 %d OK\nContent-Length: %ld\nContent-Type: application/json\nAccess-Control-Allow-Origin: *\n\n"
 
-#define JSON_BUF_SIZE_MAX 512
+#define JSON_BUF_SIZE_MAX 1024
 
 #define STATUS_JSON "{\"peopleCount\": %" PRId32 ",\n\"lightValue\": %" PRIu32 "}"
 
@@ -173,7 +173,7 @@ ErrCode post_content(ip_addr_t *gw, ContentPostRequest *request, ContentResponse
     RETURN_IF_COND(request->body == NULL, ERR_PARAM_IS_NULL);
     //    RETURN_IF_COND(request->body_len == 0, ERR_PARAM_INVALID);
 
-#if 1 // PRINT_REQUEST
+#if PRINT_REQUEST
     INFO("POST Request: %s", request->request);
     INFO("POST Body: %s", request->body);
 #endif
