@@ -36,6 +36,8 @@ typedef struct {
 
     char ssid[SSID_MAX_LEN];
     char pass[PASS_MAX_LEN];
+
+    bool ap_state;
 } Settings;
 
 ErrCode settings_init(void);

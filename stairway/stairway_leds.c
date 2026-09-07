@@ -76,9 +76,9 @@ ErrCode stairway_leds_refresh(void) {
 
     for (uint32_t i = 0; i < ws2812_handler.led_count; i++) {
         if (((buf[i].state) && (buf[i].led_value != settings->led_on_value)) ||
-            ((emergency_state[EMERGENCY_UP]) && (i < settings->emergency_cnt[EMERGENCY_UP])) ||
-            ((emergency_state[EMERGENCY_DOWN]) &&
-             (i > ws2812_handler.led_count - settings->emergency_cnt[EMERGENCY_DOWN] - 1))) {
+            ((emergency_state[EMERGENCY_DOWN]) && (i < settings->emergency_cnt[EMERGENCY_DOWN])) ||
+            ((emergency_state[EMERGENCY_UP]) &&
+             (i > ws2812_handler.led_count - settings->emergency_cnt[EMERGENCY_UP] - 1))) {
             int16_t temp = (int16_t)buf[i].led_value + settings->led_on_step;
             if (temp > settings->led_on_value) {
                 buf[i].led_value = settings->led_on_value;

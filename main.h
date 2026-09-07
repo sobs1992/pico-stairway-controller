@@ -41,12 +41,15 @@ typedef struct {
 typedef struct {
     Detector detector[DETECTOR_TYPE_MAX];
     SensorState sensor_state[STAIRWAY_SENS_MAX];
+    uint16_t sensor_distance[STAIRWAY_SENS_MAX];
+    uint32_t sensor_error_cnt[STAIRWAY_SENS_MAX];
     int32_t people_count;
     int32_t prev_people_count;
     uint64_t people_ts;
+    uint32_t light_value;
     bool block_by_light;
     bool light_state;
-    uint32_t light_value;
+    bool test_mode;
 } Status;
 
 Status *status_get(void);

@@ -21,7 +21,10 @@
 
 #define JSON_BUF_SIZE_MAX 1024
 
-#define STATUS_JSON "{\"peopleCount\": %" PRId32 ",\n\"lightValue\": %" PRIu32 "}"
+#define STATUS_JSON                                                                                                    \
+    "{\"peopleCount\": %" PRId32 ",\n\"lightValue\": %" PRIu32 ",\n\"sen0dist\": %" PRIu16 ",\n\"sen1dist\": %" PRIu16 \
+    ",\n\"sen2dist\": %" PRIu16 ",\n\"sen3dist\": %" PRIu16 ",\n\"sen0err\": %" PRIu32 ",\n\"sen1err\": %" PRIu32      \
+    ",\n\"sen2err\": %" PRIu32 ",\n\"sen3err\": %" PRIu32 "}"
 
 static const char index_html[] = {
 #include "generated/index.html.h"
@@ -35,7 +38,10 @@ static ErrCode prepare_json_status(char **out, uint32_t *len) {
     char json_buf[JSON_BUF_SIZE_MAX] = {0};
 
     Status *status = status_get();
-    sprintf(json_buf, STATUS_JSON, status->people_count, status->light_value);
+    sprintf(json_buf, STATUS_JSON, status->people_count, status->light_value, status->sensor_distance[0],
+            status->sensor_distance[1], status->sensor_distance[2], status->sensor_distance[3],
+            status->sensor_error_cnt[0], status->sensor_error_cnt[1], status->sensor_error_cnt[2],
+            status->sensor_error_cnt[3]);
     *len = strlen(json_buf);
     *out = malloc(*len);
     RETURN_IF_COND(*out == NULL, ERR_MEM_ALLOC_FAIL);
@@ -64,6 +70,15 @@ static ErrCode apply_json_settings(char *in) {
     RETURN_IF_COND(in == NULL, ERR_PARAM_IS_NULL);
 
     set_settings_json(in, strlen(in));
+
+    return err;
+}
+
+static ErrCode set_test_mode(bool en) {
+    ErrCode err = ERR_SUCCESS;
+
+    Status *status = status_get();
+    status->test_mode = en;
 
     return err;
 }
@@ -191,6 +206,28 @@ ErrCode post_content(ip_addr_t *gw, ContentPostRequest *request, ContentResponse
 
     if (CHECK_REQUEST(request->request, "/api/settings")) {
         TO_EXIT_IF_ERROR(apply_json_settings(request->body));
+        response->body_len = sizeof("{\"status\":\"ok\"}") - 1;
+        response->body = malloc(response->body_len);
+        TO_EXIT_IF_COND(response->body == NULL, ERR_MEM_ALLOC_FAIL);
+        memcpy(response->body, "{\"status\":\"ok\"}", response->body_len);
+
+        response->header = malloc(HTTP_HEADER_MAX_SIZE);
+        TO_EXIT_IF_COND(response->header == NULL, ERR_MEM_ALLOC_FAIL);
+        response->header_len =
+            snprintf(response->header, HTTP_HEADER_MAX_SIZE, JSON_RESPONSE_HEADER, 200, response->body_len);
+    } else if (CHECK_REQUEST(request->request, "/api/test_on")) {
+        TO_EXIT_IF_ERROR(set_test_mode(true));
+        response->body_len = sizeof("{\"status\":\"ok\"}") - 1;
+        response->body = malloc(response->body_len);
+        TO_EXIT_IF_COND(response->body == NULL, ERR_MEM_ALLOC_FAIL);
+        memcpy(response->body, "{\"status\":\"ok\"}", response->body_len);
+
+        response->header = malloc(HTTP_HEADER_MAX_SIZE);
+        TO_EXIT_IF_COND(response->header == NULL, ERR_MEM_ALLOC_FAIL);
+        response->header_len =
+            snprintf(response->header, HTTP_HEADER_MAX_SIZE, JSON_RESPONSE_HEADER, 200, response->body_len);
+    } else if (CHECK_REQUEST(request->request, "/api/test_off")) {
+        TO_EXIT_IF_ERROR(set_test_mode(false));
         response->body_len = sizeof("{\"status\":\"ok\"}") - 1;
         response->body = malloc(response->body_len);
         TO_EXIT_IF_COND(response->body == NULL, ERR_MEM_ALLOC_FAIL);

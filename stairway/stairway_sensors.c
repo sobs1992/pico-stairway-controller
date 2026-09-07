@@ -15,34 +15,34 @@ static bool dev_error[DEV_ID_MAX] = {false};
 static Settings *settings = NULL;
 
 #if !EMULATE_SENSORS
-static ErrCode sensor_0_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                           uint8_t payload_len);
-static ErrCode sensor_1_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                           uint8_t payload_len);
+static ErrCode sensor_up_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
+                            uint8_t payload_len);
+static ErrCode sensor_down_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
+                              uint8_t payload_len);
 
 static const ModbusMasterRequest request[DEV_ID_MAX] = {
     [DEV_ID_UP] =
-        {
-            .id = 1,
-            .func = 3,
-            .reg_addr = 0,
-            .reg_length = 6,
-            .timeout = 100,
-            .cb = sensor_0_cb,
-        },
-    [DEV_ID_DOWN] =
         {
             .id = 2,
             .func = 3,
             .reg_addr = 0,
             .reg_length = 6,
             .timeout = 100,
-            .cb = sensor_1_cb,
+            .cb = sensor_up_cb,
+        },
+    [DEV_ID_DOWN] =
+        {
+            .id = 1,
+            .func = 3,
+            .reg_addr = 0,
+            .reg_length = 6,
+            .timeout = 100,
+            .cb = sensor_down_cb,
         },
 };
 
-static ErrCode sensor_0_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                           uint8_t payload_len) {
+static ErrCode sensor_up_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
+                            uint8_t payload_len) {
     ErrCode err = ERR_SUCCESS;
     if (status != MODBUS_ERR_SUCCESS) {
         dev_error[DEV_ID_UP] = true;
@@ -71,8 +71,8 @@ static ErrCode sensor_0_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw
     return err;
 }
 
-static ErrCode sensor_1_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                           uint8_t payload_len) {
+static ErrCode sensor_down_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
+                              uint8_t payload_len) {
     ErrCode err = ERR_SUCCESS;
     if (status != MODBUS_ERR_SUCCESS) {
         dev_error[DEV_ID_DOWN] = true;
@@ -88,10 +88,10 @@ static ErrCode sensor_1_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw
             sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND] = (payload[4] << 8) | payload[5];
             sensors_values.error[STAIRWAY_SENS_DOWN_FIRST] = (error & 0x01) == 0x01;
             sensors_values.error[STAIRWAY_SENS_DOWN_SECOND] = (error & 0x02) == 0x02;
-            sensors_values.state[STAIRWAY_SENS_DOWN_FIRST] =
-                sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST] < sensors_settings.trigger_value[STAIRWAY_SENS_UP_FIRST];
+            sensors_values.state[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST] <
+                                                             sensors_settings.trigger_value[STAIRWAY_SENS_DOWN_FIRST];
             sensors_values.state[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND] <
-                                                              sensors_settings.trigger_value[STAIRWAY_SENS_UP_SECOND];
+                                                              sensors_settings.trigger_value[STAIRWAY_SENS_DOWN_SECOND];
             dev_error[DEV_ID_DOWN] = false;
         } break;
         default: {

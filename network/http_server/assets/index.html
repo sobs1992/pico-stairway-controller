@@ -74,6 +74,7 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 16px;
+            margin-bottom: 16px;
         }
 
         .info-card {
@@ -99,6 +100,71 @@
             font-weight: 700;
             color: #00d2ff;
             text-shadow: 0 0 8px rgba(0,210,255,0.3);
+        }
+
+        .sensor-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(0, 210, 255, 0.1);
+        }
+
+        .sensor-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #0a0f1e;
+            border-radius: 16px;
+            padding: 10px 16px;
+            border: 1px solid rgba(0, 210, 255, 0.08);
+            transition: all 0.2s;
+        }
+
+        .sensor-item:hover {
+            border-color: rgba(0, 210, 255, 0.2);
+        }
+
+        .sensor-item .sensor-name {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #8e9db5;
+            min-width: 100px;
+        }
+
+        .sensor-item .sensor-data {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sensor-item .sensor-dist {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #00d2ff;
+        }
+
+        .sensor-item .sensor-dist .unit {
+            font-size: 0.7rem;
+            color: #4a5a7a;
+            font-weight: 400;
+        }
+
+        .sensor-item .sensor-err {
+            font-size: 0.8rem;
+            color: #ff6b6b;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .sensor-item .sensor-err.ok {
+            color: #51cf66;
+        }
+
+        .sensor-item .sensor-err .err-label {
+            color: #6c86a3;
+            font-size: 0.65rem;
         }
 
         .card {
@@ -144,6 +210,26 @@
             letter-spacing: 0.5px;
             color: #8e9db5;
             margin-bottom: 6px;
+        }
+
+        .label-with-unit {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            color: #8e9db5;
+            margin-bottom: 6px;
+        }
+
+        .label-with-unit .unit {
+            color: #4a5a7a;
+            font-size: 0.7rem;
+            background: rgba(0,210,255,0.08);
+            padding: 2px 10px;
+            border-radius: 12px;
         }
 
         input, select {
@@ -211,40 +297,14 @@
             left: 25px;
         }
 
-        input[type="range"] {
-            padding: 0;
-            height: 40px;
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
             -webkit-appearance: none;
-            background: transparent;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            background: #00d2ff;
-            border-radius: 50%;
-            cursor: pointer;
-            margin-top: -8px;
-            box-shadow: 0 0 6px #00d2ff;
-        }
-
-        input[type="range"]::-webkit-slider-runnable-track {
-            height: 4px;
-            background: #2a3550;
-            border-radius: 4px;
-        }
-
-        .range-value {
-            display: inline-block;
-            background: #00d2ff20;
-            backdrop-filter: blur(4px);
-            padding: 4px 12px;
-            border-radius: 40px;
-            font-size: 0.75rem;
-            margin-left: 8px;
-            font-weight: 600;
-            color: #00d2ff;
+            margin: 0;
         }
 
         button {
@@ -265,8 +325,27 @@
             transform: scale(0.97);
         }
 
+        button.test-on {
+            background: #51cf66;
+            box-shadow: 0 4px 12px rgba(81, 207, 102, 0.3);
+        }
+
+        button.test-on:hover {
+            background: #40b858;
+        }
+
+        button.test-off {
+            background: #ff6b6b;
+            box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+        }
+
+        button.test-off:hover {
+            background: #e05555;
+        }
+
         .action-buttons {
             display: flex;
+            flex-direction: column;
             gap: 12px;
             position: fixed;
             bottom: 20px;
@@ -274,6 +353,15 @@
             right: 16px;
             max-width: 568px;
             margin: 0 auto;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .action-row button {
+            flex: 1;
         }
 
         .btn-outline {
@@ -285,7 +373,7 @@
 
         .status {
             position: fixed;
-            bottom: 90px;
+            bottom: 140px;
             left: 20px;
             right: 20px;
             background: #111725;
@@ -305,7 +393,7 @@
         /* ===== Mobile ===== */
         @media (max-width: 600px) {
             body {
-                padding: 12px 10px 120px;
+                padding: 12px 10px 180px;
             }
             h1 {
                 font-size: 1.4rem;
@@ -320,6 +408,18 @@
             }
             .info-card {
                 width: 100%;
+            }
+            .sensor-item {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 6px;
+            }
+            .sensor-item .sensor-name {
+                min-width: unset;
+                text-align: center;
+            }
+            .sensor-item .sensor-data {
+                justify-content: space-around;
             }
             .setting-row {
                 flex-direction: column;
@@ -344,20 +444,13 @@
             button {
                 font-size: 16px;
             }
-            .range-value {
-                display: inline-block;
-                margin-top: 6px;
-                margin-left: 0;
-            }
             .action-buttons {
                 position: static;
                 margin-top: 20px;
-                display: flex;
+            }
+            .action-row {
                 flex-direction: column;
                 gap: 10px;
-            }
-            .action-buttons button {
-                width: 100%;
             }
             .status {
                 bottom: 20px;
@@ -382,6 +475,37 @@
                 <div class="info-value" id="lightSensor">0</div>
             </div>
         </div>
+
+        <div class="sensor-list">
+            <div class="sensor-item">
+                <span class="sensor-name">⬇️ Датчик 0 (Верх A)</span>
+                <div class="sensor-data">
+                    <span class="sensor-dist"><span id="sen0dist">0</span><span class="unit"> мм</span></span>
+                    <span class="sensor-err" id="sen0err"><span class="err-label">Ошибок: </span><span id="sen0err">0</span></span>
+                </div>
+            </div>
+            <div class="sensor-item">
+                <span class="sensor-name">⬇️ Датчик 1 (Верх B)</span>
+                <div class="sensor-data">
+                    <span class="sensor-dist"><span id="sen1dist">0</span><span class="unit"> мм</span></span>
+                    <span class="sensor-err" id="sen1err"><span class="err-label">Ошибок: </span><span id="sen1err">0</span></span>
+                </div>
+            </div>
+            <div class="sensor-item">
+                <span class="sensor-name">⬆️ Датчик 2 (Низ A)</span>
+                <div class="sensor-data">
+                    <span class="sensor-dist"><span id="sen2dist">0</span><span class="unit"> мм</span></span>
+                    <span class="sensor-err" id="sen2err"><span class="err-label">Ошибок: </span><span id="sen2err">0</span></span>
+                </div>
+            </div>
+            <div class="sensor-item">
+                <span class="sensor-name">⬆️ Датчик 3 (Низ B)</span>
+                <div class="sensor-data">
+                    <span class="sensor-dist"><span id="sen3dist">0</span><span class="unit"> мм</span></span>
+                    <span class="sensor-err" id="sen3err"><span class="err-label">Ошибок: </span><span id="sen3err">0</span></span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <form id="settingsForm">
@@ -393,12 +517,18 @@
             </label>
             <div id="lightSettings">
                 <div class="setting-item" style="margin-top: 12px;">
-                    <label>🌞 Дневной порог<span id="light_sensor_day_value" class="range-value">0</span></label>
-                    <input type="range" id="light_sensor_day" min="0" max="4095" step="1">
+                    <div class="label-with-unit">
+                        <span>🌞 Дневной порог</span>
+                        <span class="unit">0-4095</span>
+                    </div>
+                    <input type="number" id="light_sensor_day" min="0" max="4095" step="1">
                 </div>
                 <div class="setting-item" style="margin-top: 12px;">
-                    <label>🌙 Ночной порог<span id="light_sensor_night_value" class="range-value">0</span></label>
-                    <input type="range" id="light_sensor_night" min="0" max="4095" step="10">
+                    <div class="label-with-unit">
+                        <span>🌙 Ночной порог</span>
+                        <span class="unit">0-4095</span>
+                    </div>
+                    <input type="number" id="light_sensor_night" min="0" max="4095" step="10">
                 </div>
             </div>
         </div>
@@ -406,20 +536,28 @@
         <div class="card">
             <div class="card-header"><h2>🔄 Датчики движения</h2></div>
             <div class="setting-item" style="margin-top: 16px;margin-bottom: 16px;">
-                <label>⏱️ Задержка сработки датчиков<span id="sensor_debouce_time_value" class="range-value">0</span> мс</label>
-                <input type="range" id="sensor_debouce_time" min="0" max="5000">
+                <div class="label-with-unit">
+                    <span>⏱️ Задержка сработки датчиков</span>
+                    <span class="unit">мс</span>
+                </div>
+                <input type="number" id="sensor_debouce_time" min="0" max="5000" step="10">
             </div>
             <div style="margin-bottom: 20px;">
                 <h3 style="color:#ffaa66; margin-bottom: 10px;">⬇️ Датчики внизу</h3>
                 <div class="setting-row">
                     <div class="setting-item">
-                        <label>Датчик A. Дистанция<span id="dist_trigger_down_first_value" class="range-value">0</span> мм</label>
-                        <input type="range" id="dist_trigger_down_first" min="0" max="4000">
+                        <div class="label-with-unit">
+                            <span>Датчик A. Дистанция</span>
+                            <span class="unit">мм</span>
+                        </div>
+                        <input type="number" id="dist_trigger_down_first" min="0" max="4000" step="10">
                     </div>
                     <div class="setting-item">
-                        <label>Датчик B. Дистанция<span id="dist_trigger_down_second_value" class="range-value">0</span> мм</label>
-                        <input type="range" id="dist_trigger_down_second" min="0" max="4000">
-                        
+                        <div class="label-with-unit">
+                            <span>Датчик B. Дистанция</span>
+                            <span class="unit">мм</span>
+                        </div>
+                        <input type="number" id="dist_trigger_down_second" min="0" max="4000" step="10">
                     </div>
                 </div>
                 <label class="toggle-switch">
@@ -432,13 +570,18 @@
                 <h3 style="color:#ffaa66; margin-bottom: 10px;">⬆️ Датчики вверху</h3>
                 <div class="setting-row">
                     <div class="setting-item">
-                        <label>Датчик A. Дистанция<span id="dist_trigger_up_first_value" class="range-value">0</span> мм</label>
-                        <input type="range" id="dist_trigger_up_first" min="0" max="4000">
+                        <div class="label-with-unit">
+                            <span>Датчик A. Дистанция</span>
+                            <span class="unit">мм</span>
+                        </div>
+                        <input type="number" id="dist_trigger_up_first" min="0" max="4000" step="10">
                     </div>
                     <div class="setting-item">
-                        <label>Датчик B. Дистанция<span id="dist_trigger_up_second_value" class="range-value">0</span> мм</label>
-                        <input type="range" id="dist_trigger_up_second" min="0" max="4000">
-                        
+                        <div class="label-with-unit">
+                            <span>Датчик B. Дистанция</span>
+                            <span class="unit">мм</span>
+                        </div>
+                        <input type="number" id="dist_trigger_up_second" min="0" max="4000" step="10">
                     </div>
                 </div>
                 <label class="toggle-switch">
@@ -456,32 +599,50 @@
                     <input type="number" id="led_count" value="1" min="1" max="100">
                 </div>
                 <div class="setting-item" style="margin-bottom: 16px;">
-                    <label>Задержка включения ступеней (мс)</label>
-                    <input type="number" id="leds_time_interval" value="0" min="0" max="10000">
+                    <div class="label-with-unit">
+                        <span>Задержка включения ступеней</span>
+                        <span class="unit">мс</span>
+                    </div>
+                    <input type="number" id="leds_time_interval" value="0" min="0" max="10000" step="10">
                 </div>
             </div>
             <div class="setting-item" style="margin-bottom: 16px;">
-                <label>⏱️ Таймаут выключения лестницы (сек)</label>
-                <input type="number" id="leds_off_timeout" value="0" min="0">
+                <div class="label-with-unit">
+                    <span>⏱️ Таймаут выключения лестницы</span>
+                    <span class="unit">сек</span>
+                </div>
+                <input type="number" id="leds_off_timeout" value="0" min="0" step="1">
             </div>
             <div class="setting-row" style="margin-bottom: 16px;">
                 <div class="setting-item">
-                    <label>✨ Яркость вкл<span id="led_on_value_value" class="range-value">0</span></label>
-                    <input type="range" id="led_on_value" min="0" max="255">
+                    <div class="label-with-unit">
+                        <span>✨ Яркость вкл</span>
+                        <span class="unit">0–255</span>
+                    </div>
+                    <input type="number" id="led_on_value" min="0" max="255" step="1">
                 </div>
                 <div class="setting-item">
-                    <label>🌑 Яркость выкл<span id="led_off_value_value" class="range-value">0</span></label>
-                    <input type="range" id="led_off_value" min="0" max="255">
+                    <div class="label-with-unit">
+                        <span>🌑 Яркость выкл</span>
+                        <span class="unit">0–255</span>
+                    </div>
+                    <input type="number" id="led_off_value" min="0" max="255" step="1">
                 </div>
             </div>
             <div class="setting-row" style="margin-bottom: 16px;">
                 <div class="setting-item">
-                    <label>📈 Скорость включения LED<span id="led_on_step_value" class="range-value">0</span></label>
-                    <input type="range" id="led_on_step" min="1" max="255">
+                    <div class="label-with-unit">
+                        <span>📈 Скорость включения LED</span>
+                        <span class="unit">1-255</span>
+                    </div>
+                    <input type="number" id="led_on_step" min="1" max="255" step="1">
                 </div>
                 <div class="setting-item">
-                    <label>📉 Скорость выключения LED<span id="led_off_step_value" class="range-value">0</span></label>
-                    <input type="range" id="led_off_step" min="1" max="255">
+                    <div class="label-with-unit">
+                        <span>📉 Скорость выключения LED</span>
+                        <span class="unit">1-255</span>
+                    </div>
+                    <input type="number" id="led_off_step" min="1" max="255" step="1">
                 </div>
             </div>
         </div>
@@ -501,8 +662,11 @@
                     </div>
                 </div>
                 <div class="setting-item" style="margin-bottom: 16px;">
-                    <label>⏱️ Задержка сработки датчиков (мс)</label>
-                    <input type="number" id="emergency_block_ms" value="0" min="0">
+                    <div class="label-with-unit">
+                        <span>⏱️ Задержка сработки датчиков</span>
+                        <span class="unit">мс</span>
+                    </div>
+                    <input type="number" id="emergency_block_ms" value="0" min="0" step="10">
                 </div>
             </div>
         </div>
@@ -520,9 +684,15 @@
         </div>
 
         <div class="action-buttons">
-            <button type="button" id="saveBtn" style="flex:2">💾 Сохранить</button>
-            <button type="button" id="defaultBtn" style="flex:2">🔄 Сброс настроек</button>
-            <button type="button" id="restartBtn" style="flex:2">🔁 Перезагрузка</button>
+            <div class="action-row">
+                <button type="button" id="saveBtn">💾 Сохранить</button>
+                <button type="button" id="defaultBtn">🔄 Сброс</button>
+                <button type="button" id="restartBtn">🔁 Перезагрузка</button>
+            </div>
+            <div class="action-row">
+                <button type="button" id="testOnBtn" class="test-on">✅ Test ON</button>
+                <button type="button" id="testOffBtn" class="test-off">❌ Test OFF</button>
+            </div>
         </div>
     </form>
 </div>
@@ -547,7 +717,36 @@
             const data = await resp.json();
             document.getElementById('peopleCount').innerText = data.peopleCount ?? 0;
             document.getElementById('lightSensor').innerText = data.lightValue ?? 0;
-        }catch(e){}
+            
+            const sensorDist = ['sen0dist', 'sen1dist', 'sen2dist', 'sen3dist'];
+            const sensorErr = ['sen0err', 'sen1err', 'sen2err', 'sen3err'];
+            
+            for (let i = 0; i < 4; i++) {
+                const distEl = document.getElementById(sensorDist[i]);
+                const errEl = document.getElementById(sensorErr[i]);
+                
+                const dist = data[`sen${i}dist`];
+                const err = data[`sen${i}err`];
+                
+                if (dist !== undefined && distEl) {
+                    distEl.innerText = dist;
+                }
+                
+                if (err !== undefined && errEl) {
+                    errEl.innerText = err;
+                    const errContainer = document.getElementById(`sen${i}err`);
+                    if (errContainer) {
+                        if (err === 0) {
+                            errContainer.className = 'sensor-err ok';
+                        } else {
+                            errContainer.className = 'sensor-err';
+                        }
+                    }
+                }
+            }
+        }catch(e){
+            console.error('Ошибка загрузки статуса:', e);
+        }
     }
 
     async function loadSettings(){
@@ -611,14 +810,11 @@
             for (const [field, defaultValue] of Object.entries(numFields)) {
                 const value = Number(s[field]);
                 const element = document.getElementById(field);
-                const valueElement = document.getElementById(field + '_value');
                 
                 if (!isNaN(value) && element) {
                     element.value = value;
-                    if (valueElement) valueElement.innerText = value;
                 } else {
                     element.value = defaultValue;
-                    if (valueElement) valueElement.innerText = defaultValue;
                 }
             }
 
@@ -634,6 +830,40 @@
             loadDefaultSettings();
             showStatus('❌ Ошибка загрузки настроек, используются значения по умолчанию', 'error');
         }
+    }
+
+    function loadDefaultSettings() {
+        const defaults = {
+            light_sensor_day: 0,
+            light_sensor_night: 0,
+            dist_trigger_down_first: 0,
+            dist_trigger_down_second: 0,
+            dist_trigger_up_first: 0,
+            dist_trigger_up_second: 0,
+            sensor_debouce_time: 0,
+            led_count: 1,
+            leds_time_interval: 0,
+            leds_off_timeout: 0,
+            led_on_value: 0,
+            led_off_value: 0,
+            led_on_step: 1,
+            led_off_step: 1,
+            emergency_cnt_down: 0,
+            emergency_cnt_up: 0,
+            emergency_block_ms: 0
+        };
+
+        for (const [field, value] of Object.entries(defaults)) {
+            const element = document.getElementById(field);
+            if (element) element.value = value;
+        }
+
+        document.getElementById('use_light_sensor').checked = false;
+        document.getElementById('sensor_down_swap').checked = false;
+        document.getElementById('sensor_up_swap').checked = false;
+        document.getElementById('use_emergency').checked = false;
+        document.getElementById('wifi_ssid').value = '';
+        document.getElementById('wifi_pass').value = '';
     }
 
     async function saveSettings(settings){
@@ -708,31 +938,55 @@
         }
     }
 
+    async function sendTestOn() {
+        try {
+            const resp = await fetch(`${PICO_URL}/api/test_on`, {
+                method: 'POST'
+            });
+            if (!resp.ok) throw new Error();
+            showStatus('✅ Test ON отправлен');
+        } catch(e) {
+            showStatus('❌ Ошибка отправки Test ON', 'error');
+        }
+    }
+
+    async function sendTestOff() {
+        try {
+            const resp = await fetch(`${PICO_URL}/api/test_off`, {
+                method: 'POST'
+            });
+            if (!resp.ok) throw new Error();
+            showStatus('✅ Test OFF отправлен');
+        } catch(e) {
+            showStatus('❌ Ошибка отправки Test OFF', 'error');
+        }
+    }
+
     function getCurrentSettings(){
         return {
             use_light_sensor: document.getElementById('use_light_sensor').checked,
-            light_sensor_day: parseInt(document.getElementById('light_sensor_day').value),
-            light_sensor_night: parseInt(document.getElementById('light_sensor_night').value),
+            light_sensor_day: parseInt(document.getElementById('light_sensor_day').value) || 0,
+            light_sensor_night: parseInt(document.getElementById('light_sensor_night').value) || 0,
             wifi_ssid: document.getElementById('wifi_ssid').value,
             wifi_pass: document.getElementById('wifi_pass').value,
-            dist_trigger_down_first: parseInt(document.getElementById('dist_trigger_down_first').value),
-            dist_trigger_down_second: parseInt(document.getElementById('dist_trigger_down_second').value),
+            dist_trigger_down_first: parseInt(document.getElementById('dist_trigger_down_first').value) || 0,
+            dist_trigger_down_second: parseInt(document.getElementById('dist_trigger_down_second').value) || 0,
             sensor_down_swap: document.getElementById('sensor_down_swap').checked,
-            dist_trigger_up_first: parseInt(document.getElementById('dist_trigger_up_first').value),
-            dist_trigger_up_second: parseInt(document.getElementById('dist_trigger_up_second').value),
+            dist_trigger_up_first: parseInt(document.getElementById('dist_trigger_up_first').value) || 0,
+            dist_trigger_up_second: parseInt(document.getElementById('dist_trigger_up_second').value) || 0,
             sensor_up_swap: document.getElementById('sensor_up_swap').checked,
-            sensor_debouce_time: parseInt(document.getElementById('sensor_debouce_time').value),
-            led_count: parseInt(document.getElementById('led_count').value),
-            leds_time_interval: parseInt(document.getElementById('leds_time_interval').value),
-            leds_off_timeout: parseInt(document.getElementById('leds_off_timeout').value),
-            led_on_value: parseInt(document.getElementById('led_on_value').value),
-            led_off_value: parseInt(document.getElementById('led_off_value').value),
-            led_on_step: parseInt(document.getElementById('led_on_step').value),
-            led_off_step: parseInt(document.getElementById('led_off_step').value),
+            sensor_debouce_time: parseInt(document.getElementById('sensor_debouce_time').value) || 0,
+            led_count: parseInt(document.getElementById('led_count').value) || 1,
+            leds_time_interval: parseInt(document.getElementById('leds_time_interval').value) || 0,
+            leds_off_timeout: parseInt(document.getElementById('leds_off_timeout').value) || 0,
+            led_on_value: parseInt(document.getElementById('led_on_value').value) || 0,
+            led_off_value: parseInt(document.getElementById('led_off_value').value) || 0,
+            led_on_step: parseInt(document.getElementById('led_on_step').value) || 1,
+            led_off_step: parseInt(document.getElementById('led_off_step').value) || 1,
             use_emergency: document.getElementById('use_emergency').checked,
-            emergency_cnt_down: parseInt(document.getElementById('emergency_cnt_down').value),
-            emergency_cnt_up: parseInt(document.getElementById('emergency_cnt_up').value),
-            emergency_block_ms: parseInt(document.getElementById('emergency_block_ms').value)
+            emergency_cnt_down: parseInt(document.getElementById('emergency_cnt_down').value) || 0,
+            emergency_cnt_up: parseInt(document.getElementById('emergency_cnt_up').value) || 0,
+            emergency_block_ms: parseInt(document.getElementById('emergency_block_ms').value) || 0
         };
     }
 
@@ -748,18 +1002,13 @@
         await restartDevice();
     });
 
-    function initRanges(){
-        const r = ['light_sensor_day','light_sensor_night','dist_trigger_down_first','dist_trigger_down_second',
-            'dist_trigger_up_first','dist_trigger_up_second','led_on_value','led_off_value','led_on_step',
-            'led_off_step','sensor_debouce_time'];
-        r.forEach(id=>{
-            const el = document.getElementById(id);
-            if(!el) return;
-            const spanId = id+'_value';
-            const span = document.getElementById(spanId);
-            el.addEventListener('input',()=>{ if(span) span.innerText = el.value; });
-        });
-    }
+    document.getElementById('testOnBtn').addEventListener('click', async(e)=>{
+        await sendTestOn();
+    });
+
+    document.getElementById('testOffBtn').addEventListener('click', async(e)=>{
+        await sendTestOff();
+    });
 
     document.getElementById('use_light_sensor').addEventListener('change',(e)=>{
         document.getElementById('lightSettings').style.opacity = e.target.checked ? '1' : '0.4';
@@ -769,7 +1018,6 @@
     });
 
     document.addEventListener('DOMContentLoaded',()=>{
-        initRanges();
         loadSettings();
         loadInfo();
         updateInterval = setInterval(loadInfo, 1000);
