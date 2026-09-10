@@ -8,6 +8,7 @@ typedef struct {
 
 typedef struct {
     uint16_t dist[STAIRWAY_SENS_MAX];
+    uint16_t signal[STAIRWAY_SENS_MAX];
     bool state[STAIRWAY_SENS_MAX];
     bool error[STAIRWAY_SENS_MAX];
 } StairwaySensorsGet;

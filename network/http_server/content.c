@@ -256,7 +256,7 @@ ErrCode post_content(ip_addr_t *gw, ContentPostRequest *request, ContentResponse
         response->header_len = snprintf(response->header, HTTP_HEADER_MAX_SIZE, HTTP_ERROR_HEADER, 404);
     }
 
-#if 1 // PRINT_RESPONSE
+#if PRINT_RESPONSE
     INFO("POST Response:");
     printf("\tHeader: %s", response->header);
     if (response->body) {

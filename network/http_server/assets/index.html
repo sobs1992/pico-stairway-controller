@@ -880,6 +880,9 @@
     }
 
     async function resetSettings(){
+        if (!confirm('Вы уверены что хотите сбросить настройки на заводские?')) {
+            return false;
+        }
         try{
             const resp = await fetch(`${PICO_URL}/api/reset`,{
                 method:'POST',

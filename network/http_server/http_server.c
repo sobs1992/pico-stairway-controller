@@ -230,7 +230,9 @@ static err_t tcp_server_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err
                 TO_EXIT_IF_COND(send_err != ERR_OK, ERR_FAIL);
             } else if (strncmp(HTTP_POST, con_state->request.data, sizeof(HTTP_POST) - 1) == 0) {
                 req_post.request = con_state->request.data + sizeof(HTTP_POST); // + space;
+#if 0
                 INFO("POST REQUEST: %s\n", req_post.request);
+#endif
                 char *end_req = strstr(req_post.request, "HTTP/");
                 if (end_req) {
                     *end_req++ = 0;

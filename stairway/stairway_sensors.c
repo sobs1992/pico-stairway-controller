@@ -6,6 +6,9 @@
 #include "api/settings_api.h"
 #include <string.h>
 
+#define MAX_RANGE        4000
+#define SIGNAL_THRESHOLD 15
+
 typedef enum { DEV_ID_MIN = 0, DEV_ID_UP = DEV_ID_MIN, DEV_ID_DOWN, DEV_ID_MAX } DevId;
 typedef enum { SM_MIN = 0, SM_DEV_ID_0_REQ = SM_MIN, SM_DEV_ID_0_WAIT, SM_DEV_ID_1_REQ, SM_DEV_ID_1_WAIT, SM_MAX } SM;
 
@@ -56,6 +59,8 @@ static ErrCode sensor_up_cb(ModbusError status, uint8_t *raw_answer, uint16_t ra
             uint16_t error = (payload[10] << 8) | payload[11];
             sensors_values.dist[STAIRWAY_SENS_UP_FIRST] = (payload[2] << 8) | payload[3];
             sensors_values.dist[STAIRWAY_SENS_UP_SECOND] = (payload[4] << 8) | payload[5];
+            sensors_values.signal[STAIRWAY_SENS_UP_FIRST] = (payload[6] << 8) | payload[7];
+            sensors_values.signal[STAIRWAY_SENS_UP_SECOND] = (payload[8] << 8) | payload[9];
             sensors_values.error[STAIRWAY_SENS_UP_FIRST] = (error & 0x01) == 0x01;
             sensors_values.error[STAIRWAY_SENS_UP_SECOND] = (error & 0x02) == 0x02;
             sensors_values.state[STAIRWAY_SENS_UP_FIRST] =
@@ -86,6 +91,8 @@ static ErrCode sensor_down_cb(ModbusError status, uint8_t *raw_answer, uint16_t 
             uint16_t error = (payload[10] << 8) | payload[11];
             sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST] = (payload[2] << 8) | payload[3];
             sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND] = (payload[4] << 8) | payload[5];
+            sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST] = (payload[6] << 8) | payload[7];
+            sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND] = (payload[8] << 8) | payload[9];
             sensors_values.error[STAIRWAY_SENS_DOWN_FIRST] = (error & 0x01) == 0x01;
             sensors_values.error[STAIRWAY_SENS_DOWN_SECOND] = (error & 0x02) == 0x02;
             sensors_values.state[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST] <
@@ -167,21 +174,43 @@ ErrCode stairway_sensors_get(StairwaySensorsGet *value) {
         value->state[STAIRWAY_SENS_UP_SECOND] = false;
         value->dist[STAIRWAY_SENS_UP_FIRST] = 0;
         value->dist[STAIRWAY_SENS_UP_SECOND] = 0;
+        value->signal[STAIRWAY_SENS_UP_FIRST] = 0;
+        value->signal[STAIRWAY_SENS_UP_SECOND] = 0;
     } else {
         if (!settings->sensor_up_swap) {
             value->error[STAIRWAY_SENS_UP_FIRST] = sensors_values.error[STAIRWAY_SENS_UP_FIRST];
             value->error[STAIRWAY_SENS_UP_SECOND] = sensors_values.error[STAIRWAY_SENS_UP_SECOND];
             value->state[STAIRWAY_SENS_UP_FIRST] = sensors_values.state[STAIRWAY_SENS_UP_FIRST];
             value->state[STAIRWAY_SENS_UP_SECOND] = sensors_values.state[STAIRWAY_SENS_UP_SECOND];
-            value->dist[STAIRWAY_SENS_UP_FIRST] = sensors_values.dist[STAIRWAY_SENS_UP_FIRST];
-            value->dist[STAIRWAY_SENS_UP_SECOND] = sensors_values.dist[STAIRWAY_SENS_UP_SECOND];
+            value->signal[STAIRWAY_SENS_UP_FIRST] = sensors_values.signal[STAIRWAY_SENS_UP_FIRST];
+            value->signal[STAIRWAY_SENS_UP_SECOND] = sensors_values.signal[STAIRWAY_SENS_UP_SECOND];
+            if (sensors_values.signal[STAIRWAY_SENS_UP_FIRST] >= SIGNAL_THRESHOLD) {
+                value->dist[STAIRWAY_SENS_UP_FIRST] = sensors_values.dist[STAIRWAY_SENS_UP_FIRST];
+            } else {
+                value->dist[STAIRWAY_SENS_UP_FIRST] = MAX_RANGE;
+            }
+            if (sensors_values.signal[STAIRWAY_SENS_UP_SECOND] >= SIGNAL_THRESHOLD) {
+                value->dist[STAIRWAY_SENS_UP_SECOND] = sensors_values.dist[STAIRWAY_SENS_UP_SECOND];
+            } else {
+                value->dist[STAIRWAY_SENS_UP_SECOND] = MAX_RANGE;
+            }
         } else {
             value->error[STAIRWAY_SENS_UP_FIRST] = sensors_values.error[STAIRWAY_SENS_UP_SECOND];
             value->error[STAIRWAY_SENS_UP_SECOND] = sensors_values.error[STAIRWAY_SENS_UP_FIRST];
             value->state[STAIRWAY_SENS_UP_FIRST] = sensors_values.state[STAIRWAY_SENS_UP_SECOND];
             value->state[STAIRWAY_SENS_UP_SECOND] = sensors_values.state[STAIRWAY_SENS_UP_FIRST];
-            value->dist[STAIRWAY_SENS_UP_FIRST] = sensors_values.dist[STAIRWAY_SENS_UP_SECOND];
-            value->dist[STAIRWAY_SENS_UP_SECOND] = sensors_values.dist[STAIRWAY_SENS_UP_FIRST];
+            value->signal[STAIRWAY_SENS_UP_FIRST] = sensors_values.signal[STAIRWAY_SENS_UP_SECOND];
+            value->signal[STAIRWAY_SENS_UP_SECOND] = sensors_values.signal[STAIRWAY_SENS_UP_FIRST];
+            if (sensors_values.signal[STAIRWAY_SENS_UP_FIRST] >= SIGNAL_THRESHOLD) {
+                value->dist[STAIRWAY_SENS_UP_SECOND] = sensors_values.dist[STAIRWAY_SENS_UP_SECOND];
+            } else {
+                value->dist[STAIRWAY_SENS_UP_SECOND] = MAX_RANGE;
+            }
+            if (sensors_values.signal[STAIRWAY_SENS_UP_SECOND] >= SIGNAL_THRESHOLD) {
+                value->dist[STAIRWAY_SENS_UP_FIRST] = sensors_values.dist[STAIRWAY_SENS_UP_FIRST];
+            } else {
+                value->dist[STAIRWAY_SENS_UP_FIRST] = MAX_RANGE;
+            }
         }
     }
 
@@ -192,14 +221,26 @@ ErrCode stairway_sensors_get(StairwaySensorsGet *value) {
         value->state[STAIRWAY_SENS_DOWN_SECOND] = false;
         value->dist[STAIRWAY_SENS_DOWN_FIRST] = 0;
         value->dist[STAIRWAY_SENS_DOWN_SECOND] = 0;
+        value->signal[STAIRWAY_SENS_DOWN_FIRST] = 0;
+        value->signal[STAIRWAY_SENS_DOWN_SECOND] = 0;
     } else {
         if (!settings->sensor_down_swap) {
             value->error[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.error[STAIRWAY_SENS_DOWN_FIRST];
             value->error[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.error[STAIRWAY_SENS_DOWN_SECOND];
             value->state[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.state[STAIRWAY_SENS_DOWN_FIRST];
             value->state[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.state[STAIRWAY_SENS_DOWN_SECOND];
-            value->dist[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST];
-            value->dist[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND];
+            value->signal[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST];
+            value->signal[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND];
+            if (sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST] >= SIGNAL_THRESHOLD) {
+                value->dist[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST];
+            } else {
+                value->dist[STAIRWAY_SENS_DOWN_FIRST] = MAX_RANGE;
+            }
+            if (sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND] >= SIGNAL_THRESHOLD) {
+                value->dist[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND];
+            } else {
+                value->dist[STAIRWAY_SENS_DOWN_SECOND] = MAX_RANGE;
+            }
         } else {
             value->error[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.error[STAIRWAY_SENS_DOWN_SECOND];
             value->error[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.error[STAIRWAY_SENS_DOWN_FIRST];
@@ -207,6 +248,18 @@ ErrCode stairway_sensors_get(StairwaySensorsGet *value) {
             value->state[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.state[STAIRWAY_SENS_DOWN_FIRST];
             value->dist[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND];
             value->dist[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST];
+            value->signal[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND];
+            value->signal[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST];
+            if (sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST] >= SIGNAL_THRESHOLD) {
+                value->dist[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND];
+            } else {
+                value->dist[STAIRWAY_SENS_DOWN_SECOND] = MAX_RANGE;
+            }
+            if (sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND] >= SIGNAL_THRESHOLD) {
+                value->dist[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST];
+            } else {
+                value->dist[STAIRWAY_SENS_DOWN_FIRST] = MAX_RANGE;
+            }
         }
     }
     return err;

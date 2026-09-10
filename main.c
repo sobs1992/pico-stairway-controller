@@ -170,7 +170,7 @@ int main() {
 #if 0
         ANTISPAM_BEGIN(1000)
         for (uint32_t i = 0; i < STAIRWAY_SENS_MAX; i++) {
-            INFO("Sensor %d value %d", i, sen_values.dist[i]);
+            INFO("Sensor %ld value %d", i, sen_values.signal[i]);
         }
         ANTISPAM_END
 #endif
@@ -396,7 +396,7 @@ int main() {
         }
 
         static uint64_t rdt = 0;
-        if (get_time_ms() - rdt > 20) {
+        if (get_time_ms() - rdt > 2) {
             rdt = get_time_ms();
             stairway_leds_refresh();
         }
