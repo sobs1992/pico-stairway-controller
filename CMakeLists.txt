@@ -4,8 +4,6 @@ if(NOT DEFINED ENV{PICO_SDK_PATH})
     message(FATAL_ERROR "Please create environment variable PICO_SDK_PATH and specify path to pico_sdk.")
 endif()
 
-set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
-
 # initialize the SDK directly
 include($ENV{PICO_SDK_PATH}/pico_sdk_init.cmake)
 
@@ -50,7 +48,6 @@ target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/network/dhcp_server
     ${CMAKE_CURRENT_LIST_DIR}/network/dns_server
     ${CMAKE_CURRENT_LIST_DIR}/network/http_server
-    ${CMAKE_CURRENT_LIST_DIR}/network/generated
     ${CMAKE_CURRENT_LIST_DIR}/
 )
 

@@ -17,6 +17,7 @@ ErrCode cli_init(uint32_t cmd_count) {
     config->maxBindingCount = cmd_count;
 
     cli = embeddedCliNew(config);
+    RETURN_IF_COND(cli == NULL, ERR_MEM_ALLOC_FAIL);
     cli->writeChar = cli_write_char;
 
     return err;
@@ -32,18 +33,20 @@ ErrCode cli_putchar(char ch) {
     return err;
 }
 
-ErrCode cli_add_command(char *cmd_token, char *help, void (*func)(EmbeddedCli *cli, char *args, void *context)) {
+ErrCode cli_add_command(const char *cmd_token, const char *help,
+                        void (*func)(EmbeddedCli *cli, char *args, void *context), void *context) {
     ErrCode err = ERR_SUCCESS;
+    RETURN_IF_COND(cli == NULL, ERR_NEED_INIT);
 
     CliCommandBinding cmd = {
         cmd_token, // command name (spaces are not allowed)
         help,      // Optional help for a command (NULL for no help)
         true,      // flag whether to tokenize arguments
-        NULL,      // optional pointer to any application context
+        context,   // optional pointer to any application context
         func       // binding function
     };
 
-    embeddedCliAddBinding(cli, cmd);
+    RETURN_IF_COND(!embeddedCliAddBinding(cli, cmd), ERR_OVERFLOW);
 
     return err;
 }

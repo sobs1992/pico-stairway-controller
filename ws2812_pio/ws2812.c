@@ -53,6 +53,26 @@ ErrCode ws2812_deinit(Ws2812_Header *h) {
     return err;
 }
 
+ErrCode ws2812_set_led_count(Ws2812_Header *h, uint32_t led_count) {
+    ErrCode err = ERR_SUCCESS;
+    RETURN_IF_COND(h == NULL, ERR_PARAM_IS_NULL);
+    RETURN_IF_COND(h->mem == NULL, ERR_NEED_INIT);
+    RETURN_IF_COND(led_count == 0, ERR_PARAM_INVALID);
+
+    // Switch off the whole old strip first, otherwise the LEDs past the new end keep their last color
+    RETURN_IF_ERROR(ws2812_clear(h));
+
+    uint32_t mem_size = led_count * sizeof(uint32_t);
+    uint32_t *mem = realloc(h->mem, mem_size);
+    RETURN_IF_COND(mem == NULL, ERR_MEM_ALLOC_FAIL);
+    memset(mem, 0x00, mem_size);
+    h->mem = mem;
+    h->mem_size = mem_size;
+    h->led_count = led_count;
+
+    return err;
+}
+
 ErrCode ws2812_clear(Ws2812_Header *h) {
     ErrCode err = ERR_SUCCESS;
 

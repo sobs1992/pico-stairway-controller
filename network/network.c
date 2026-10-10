@@ -37,8 +37,8 @@ ErrCode net_ap_init(const char *ssid, const char *pass) {
     RETURN_IF_COND(pass == NULL, ERR_PARAM_IS_NULL);
     size_t ssid_len = strlen(ssid);
     size_t pass_len = strlen(pass);
-    RETURN_IF_COND(ssid_len >= MAX_SSID_LEN, ERR_PARAM_INVALID);
-    RETURN_IF_COND(pass_len >= MAX_PASS_LEN, ERR_PARAM_INVALID);
+    RETURN_IF_COND((ssid_len == 0) || (ssid_len >= MAX_SSID_LEN), ERR_PARAM_INVALID);
+    RETURN_IF_COND((pass_len < MIN_PASS_LEN) || (pass_len >= MAX_PASS_LEN), ERR_PARAM_INVALID);
 
     tcp_server_state = calloc(1, sizeof(TCP_SERVER_T));
     RETURN_IF_COND(tcp_server_state == NULL, ERR_MEM_ALLOC_FAIL);
@@ -76,12 +76,9 @@ ErrCode net_poll(void) {
 
 #if PICO_CYW43_ARCH_POLL
     if (ap_inited && ap_started) {
-        // if you are using pico_cyw43_arch_poll, then you must poll periodically from your
-        // main loop (not from a timer interrupt) to check for Wi-Fi driver or lwIP work that needs to be done.
+        // With pico_cyw43_arch_poll the Wi-Fi driver and lwIP work is done only here.
+        // Don't wait for work: the main loop must not be blocked.
         cyw43_arch_poll();
-        // you can poll as often as you like, however if you have nothing else to do you can
-        // choose to sleep until either a specified time, or cyw43_arch_poll() has work to do:
-        cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000));
     }
 #endif
 
@@ -91,13 +88,16 @@ ErrCode net_poll(void) {
 ErrCode net_ap_deinit(void) {
     ErrCode err = ERR_SUCCESS;
 
-    net_ap_set_state(false);
+    if (ap_inited) {
+        net_ap_set_state(false);
+    }
     http_server_deinit(tcp_server_state);
     dns_server_deinit(&dns_server);
     dhcp_server_deinit(&dhcp_server);
     memset(ap_ssid, 0, sizeof(ap_ssid));
     memset(ap_pass, 0, sizeof(ap_pass));
     free(tcp_server_state);
+    tcp_server_state = NULL;
     ap_inited = false;
 
     return err;

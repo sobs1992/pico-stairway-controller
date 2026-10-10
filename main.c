@@ -23,6 +23,9 @@
 #define BUTTON_POLL_PERIOD  500
 #define BUTTON_DEBOUNCE_CNT 3
 
+// FIRST sensor must be active this long to switch emergency leds on (filters single false readings)
+#define EMERGENCY_CONFIRM_MS 150
+
 static const char *detector_name[DETECTOR_TYPE_MAX] = {
     [DETECTOR_TYPE_UP] = "UP",
     [DETECTOR_TYPE_DOWN] = "DOWN",
@@ -40,6 +43,19 @@ static Settings *settings = NULL;
 static uint64_t prev_ts = 0;
 static uint64_t detector_block_ts[DETECTOR_TYPE_MAX] = {0};
 
+typedef struct {
+    StairwaySensorType sensor;
+    DetectorType detector;
+    const char *name;
+} EmergencyMap;
+
+static const EmergencyMap emergency_map[EMERGENCY_MAX] = {
+    [EMERGENCY_UP] = {STAIRWAY_SENS_UP_FIRST, DETECTOR_TYPE_UP, "UP"},
+    [EMERGENCY_DOWN] = {STAIRWAY_SENS_DOWN_FIRST, DETECTOR_TYPE_DOWN, "DOWN"},
+};
+static uint64_t emergency_sensor_on_ts[EMERGENCY_MAX] = {0}; // 0 - sensor is not active
+static bool emergency_on[EMERGENCY_MAX] = {false};
+
 static bool led_on_up = false;
 static bool led_on_down = false;
 static bool led_off_up = false;
@@ -56,20 +72,16 @@ static uint32_t led_on_down_cnt = 0;
 static uint32_t led_off_down_cnt = 0;
 
 static uint32_t last_det = 0;
+static uint64_t reboot_ts = 0;
 
 Status *status_get(void) {
     return &status;
 }
 
-inline uint64_t get_time_us(void) {
-    static uint32_t last_raw_time = 0;
-    static uint64_t total_us = 0;
-    uint32_t ts = to_us_since_boot(get_absolute_time());
-    uint32_t delta = ts - last_raw_time;
-    total_us += delta;
-    last_raw_time = ts;
-    return total_us;
+void reboot_request(uint32_t delay_ms) {
+    reboot_ts = get_time_ms() + delay_ms;
 }
+
 inline uint64_t get_time_ms(void) {
     static uint32_t last_raw_time = 0;
     static uint64_t total_ms = 0;
@@ -84,6 +96,8 @@ int main() {
     ErrCode err = ERR_SUCCESS;
     bool error_led_state = false;
     StairwaySensorsGet sen_values = {0};
+    bool sen_prev_error[STAIRWAY_SENS_MAX] = {false};
+    uint64_t sen_error_log_ts[STAIRWAY_SENS_MAX] = {0};
 
     watchdog_enable(1000, true);
 
@@ -98,18 +112,20 @@ int main() {
     light_sensor_init(LIGHT_SENSOR_PIN);
     stairway_leds_init(WS281x_PIN);
 
-    StairwaySensorsSettings sen_settings = {0};
-    memcpy(sen_settings.trigger_value, settings->dist_trigger, sizeof(settings->dist_trigger));
-    stairway_sensors_init(&sen_settings);
+    stairway_sensors_init();
 
     commands_init();
 
     LOG_IF_ERROR(net_ap_init(settings->ssid, settings->pass));
+    bool net_ready = (err == ERR_SUCCESS);
 
     while (1) {
         watchdog_update();
         net_poll();
         uint64_t ts = get_time_ms();
+        if ((reboot_ts != 0) && (ts >= reboot_ts)) {
+            watchdog_reboot(0, 0, 0);
+        }
         static uint64_t button_prev_ts = 0;
         static uint32_t button_debounce = 0;
         static bool button_state = false;
@@ -136,7 +152,7 @@ int main() {
             LOG_IF_ERROR(settings_write());
         }
 
-        if (net_ap_get_state() != settings->ap_state) {
+        if ((net_ready) && (net_ap_get_state() != settings->ap_state)) {
             LOG_IF_ERROR(net_ap_set_state(settings->ap_state));
         }
 
@@ -152,12 +168,15 @@ int main() {
 
         for (uint32_t i = 0; i < STAIRWAY_SENS_MAX; i++) {
             if (sen_values.error[i]) {
-                ANTISPAM_BEGIN(1000)
-                INFO("Sensor %s error", sensors_name[i]);
-                ANTISPAM_END
+                if ((ts - sen_error_log_ts[i]) > 1000) {
+                    sen_error_log_ts[i] = ts;
+                    INFO("Sensor %s error", sensors_name[i]);
+                }
                 error_led_state = true;
                 status.sensor_state[i].current = 0;
-                status.sensor_error_cnt[i]++;
+                if (!sen_prev_error[i]) {
+                    status.sensor_error_cnt[i]++;
+                }
             } else {
                 status.sensor_state[i].current = sen_values.state[i];
                 status.sensor_distance[i] = sen_values.dist[i];
@@ -166,14 +185,8 @@ int main() {
                 status.sensor_state[i].trigger = true;
             }
             status.sensor_state[i].ts = get_time_ms();
+            sen_prev_error[i] = sen_values.error[i];
         }
-#if 0
-        ANTISPAM_BEGIN(1000)
-        for (uint32_t i = 0; i < STAIRWAY_SENS_MAX; i++) {
-            INFO("Sensor %ld value %d", i, sen_values.signal[i]);
-        }
-        ANTISPAM_END
-#endif
         if ((status.light_state) && (settings->use_light_sensor)) {
             if ((status.people_count == 0) && (!status.block_by_light)) {
                 INFO("Block by light (value: %" PRIu32 ")", status.light_value);
@@ -186,75 +199,77 @@ int main() {
             }
         }
 
-        if (!error_led_state) {
-            for (uint32_t i = 0; i < DETECTOR_TYPE_MAX; i++) {
-                if (status.block_by_light) {
-                    status.detector[i].state = DETECTOR_STATE_IDLE;
-                    status.detector[i].ts = get_time_ms();
-                    continue;
-                }
+        for (uint32_t i = 0; i < DETECTOR_TYPE_MAX; i++) {
+            if (status.block_by_light) {
+                status.detector[i].state = DETECTOR_STATE_IDLE;
+                status.detector[i].ts = get_time_ms();
+                continue;
+            }
 
-                uint32_t sens_first = (i == DETECTOR_TYPE_UP) ? STAIRWAY_SENS_UP_FIRST : STAIRWAY_SENS_DOWN_FIRST;
-                uint32_t sens_second = (i == DETECTOR_TYPE_UP) ? STAIRWAY_SENS_UP_SECOND : STAIRWAY_SENS_DOWN_SECOND;
+            uint32_t sens_first = (i == DETECTOR_TYPE_UP) ? STAIRWAY_SENS_UP_FIRST : STAIRWAY_SENS_DOWN_FIRST;
+            uint32_t sens_second = (i == DETECTOR_TYPE_UP) ? STAIRWAY_SENS_UP_SECOND : STAIRWAY_SENS_DOWN_SECOND;
+            // Freeze only the detector whose sensors are faulty, the other one keeps working
+            if ((sen_values.error[sens_first]) || (sen_values.error[sens_second])) {
+                continue;
+            }
 
-                switch (status.detector[i].state) {
-                    case DETECTOR_STATE_IDLE: {
-                        if (status.sensor_state[sens_first].current) {
-                            INFO("Detector %s first sensor is triggered", detector_name[i]);
-                            status.detector[i].state = DETECTOR_STATE_FIRST_LOCK;
-                            status.detector[i].ts = get_time_ms();
-                        } else if (status.sensor_state[sens_second].current) {
-                            INFO("Detector %s second sensor is triggered", detector_name[i]);
-                            status.detector[i].state = DETECTOR_STATE_SECOND_LOCK;
-                            status.detector[i].ts = get_time_ms();
-                        }
-                    } break;
-                    case DETECTOR_STATE_FIRST_LOCK: {
-                        if ((!status.sensor_state[sens_first].current) &&
-                            ((get_time_ms() - status.detector[i].ts)) > settings->sensor_debouce_time) {
-                            INFO("Detector %s go to IDLE", detector_name[i]);
-                            status.detector[i].state = DETECTOR_STATE_IDLE;
-                            status.detector[i].ts = get_time_ms();
-                        } else if ((status.sensor_state[sens_second]
-                                        .current) /*&& ((get_time_ms() - detector[i].ts)) < 1000*/) {
-                            INFO("Detector %s RUN!", detector_name[i]);
-                            status.detector[i].state = DETECTOR_STATE_INC;
-                            status.detector[i].ts = get_time_ms();
-                            status.people_count++;
+            switch (status.detector[i].state) {
+                case DETECTOR_STATE_IDLE: {
+                    if (status.sensor_state[sens_first].current) {
+                        INFO("Detector %s first sensor is triggered", detector_name[i]);
+                        status.detector[i].state = DETECTOR_STATE_FIRST_LOCK;
+                        status.detector[i].ts = get_time_ms();
+                    } else if (status.sensor_state[sens_second].current) {
+                        INFO("Detector %s second sensor is triggered", detector_name[i]);
+                        status.detector[i].state = DETECTOR_STATE_SECOND_LOCK;
+                        status.detector[i].ts = get_time_ms();
+                    }
+                } break;
+                case DETECTOR_STATE_FIRST_LOCK: {
+                    if ((!status.sensor_state[sens_first].current) &&
+                        ((get_time_ms() - status.detector[i].ts)) > settings->sensor_debouce_time) {
+                        INFO("Detector %s go to IDLE", detector_name[i]);
+                        status.detector[i].state = DETECTOR_STATE_IDLE;
+                        status.detector[i].ts = get_time_ms();
+                    } else if ((status.sensor_state[sens_second]
+                                    .current) /*&& ((get_time_ms() - detector[i].ts)) < 1000*/) {
+                        INFO("Detector %s RUN!", detector_name[i]);
+                        status.detector[i].state = DETECTOR_STATE_INC;
+                        status.detector[i].ts = get_time_ms();
+                        status.people_count++;
+                        status.people_ts = status.detector[i].ts;
+                        INFO("People: %" PRId32, status.people_count);
+                    }
+                } break;
+                case DETECTOR_STATE_SECOND_LOCK: {
+                    if ((!status.sensor_state[sens_second].current) &&
+                        ((get_time_ms() - status.detector[i].ts)) > settings->sensor_debouce_time) {
+                        INFO("Detector %s go to IDLE", detector_name[i]);
+                        status.detector[i].state = DETECTOR_STATE_IDLE;
+                        status.detector[i].ts = get_time_ms();
+                    } else if ((status.sensor_state[sens_first]
+                                    .current) /*&& ((get_time_ms() - detector[i].ts)) < 1000*/) {
+                        INFO("Detector %s RUN!", detector_name[i]);
+                        status.detector[i].state = DETECTOR_STATE_DEC;
+                        status.detector[i].ts = get_time_ms();
+                        if (status.people_count) {
+                            status.people_count--;
                             status.people_ts = status.detector[i].ts;
                             INFO("People: %" PRId32, status.people_count);
                         }
-                    } break;
-                    case DETECTOR_STATE_SECOND_LOCK: {
-                        if ((!status.sensor_state[sens_second].current) &&
-                            ((get_time_ms() - status.detector[i].ts)) > settings->sensor_debouce_time) {
-                            INFO("Detector %s go to IDLE", detector_name[i]);
-                            status.detector[i].state = DETECTOR_STATE_IDLE;
-                            status.detector[i].ts = get_time_ms();
-                        } else if ((status.sensor_state[sens_first]
-                                        .current) /*&& ((get_time_ms() - detector[i].ts)) < 1000*/) {
-                            INFO("Detector %s RUN!", detector_name[i]);
-                            status.detector[i].state = DETECTOR_STATE_DEC;
-                            status.detector[i].ts = get_time_ms();
-                            if (status.people_count) {
-                                status.people_count--;
-                                status.people_ts = status.detector[i].ts;
-                                INFO("People: %" PRId32, status.people_count);
-                            }
-                        }
-                    } break;
-                    case DETECTOR_STATE_INC:
-                    case DETECTOR_STATE_DEC: {
-                        if ((!status.sensor_state[sens_first].current) && (!status.sensor_state[sens_second].current) &&
-                            ((get_time_ms() - status.detector[i].ts) > settings->sensor_debouce_time)) {
-                            INFO("Detector %s go to IDLE", detector_name[i]);
-                            status.detector[i].state = DETECTOR_STATE_IDLE;
-                            status.detector[i].ts = get_time_ms();
-                        }
-                    } break;
-                    default:
-                        break;
-                }
+                    }
+                } break;
+                case DETECTOR_STATE_INC:
+                case DETECTOR_STATE_DEC: {
+                    if ((!status.sensor_state[sens_first].current) && (!status.sensor_state[sens_second].current) &&
+                        ((get_time_ms() - status.detector[i].ts) > settings->sensor_debouce_time)) {
+                        INFO("Detector %s go to IDLE", detector_name[i]);
+                        status.detector[i].state = DETECTOR_STATE_IDLE;
+                        status.detector[i].ts = get_time_ms();
+                    }
+                } break;
+                default:
+                    break;
             }
         }
 
@@ -314,34 +329,41 @@ int main() {
                 detector_block_ts[i] = get_time_ms();
             }
         }
-        if (status.sensor_state[STAIRWAY_SENS_UP_FIRST].current) {
-            if ((!status.block_by_light) && (settings->use_emergency) &&
-                ((get_time_ms() - detector_block_ts[DETECTOR_TYPE_UP]) > settings->emergency_block_ms)) {
-                stairway_emergency_leds(EMERGENCY_UP, true);
+        for (uint32_t i = 0; i < EMERGENCY_MAX; i++) {
+            uint32_t sens = emergency_map[i].sensor;
+            if (!status.sensor_state[sens].current) {
+                emergency_sensor_on_ts[i] = 0;
+                continue;
             }
-        }
-        if (status.sensor_state[STAIRWAY_SENS_DOWN_FIRST].current) {
-            if ((!status.block_by_light) && (settings->use_emergency) &&
-                ((get_time_ms() - detector_block_ts[DETECTOR_TYPE_DOWN]) > settings->emergency_block_ms)) {
-                stairway_emergency_leds(EMERGENCY_DOWN, true);
+            if (emergency_sensor_on_ts[i] == 0) {
+                emergency_sensor_on_ts[i] = ts;
+            }
+            if ((!status.block_by_light) && (settings->use_emergency) && (!emergency_on[i]) &&
+                ((ts - emergency_sensor_on_ts[i]) >= EMERGENCY_CONFIRM_MS) &&
+                ((ts - detector_block_ts[emergency_map[i].detector]) > settings->emergency_block_ms)) {
+                INFO("Emergency %s on (dist: %" PRIu16 ", signal: %" PRIu16 ")", emergency_map[i].name,
+                     sen_values.dist[sens], sen_values.signal[sens]);
+                emergency_on[i] = true;
+                stairway_emergency_leds(i, true);
             }
         }
 
         if ((ts - prev_ts) > settings->leds_time_interval) {
             prev_ts = ts;
 
-            if (!status.sensor_state[STAIRWAY_SENS_UP_FIRST].current) {
-                stairway_emergency_leds(EMERGENCY_UP, false);
-            }
-
-            if (!status.sensor_state[STAIRWAY_SENS_DOWN_FIRST].current) {
-                stairway_emergency_leds(EMERGENCY_DOWN, false);
+            for (uint32_t i = 0; i < EMERGENCY_MAX; i++) {
+                if ((emergency_on[i]) && (!status.sensor_state[emergency_map[i].sensor].current)) {
+                    emergency_on[i] = false;
+                    stairway_emergency_leds(i, false);
+                }
             }
 
             if (led_on_up) {
                 if (led_on_up_cnt < settings->led_count) {
                     if (settings->use_emergency) {
-                        for (; led_on_up_cnt < settings->emergency_cnt[EMERGENCY_UP]; led_on_up_cnt++) {
+                        for (; (led_on_up_cnt < settings->emergency_cnt[EMERGENCY_UP]) &&
+                               (led_on_up_cnt < settings->led_count - 1);
+                             led_on_up_cnt++) {
                             stairway_leds_set_state(settings->led_count - led_on_up_cnt - 1, true, led_on_up_ts);
                         }
                     }
@@ -364,7 +386,9 @@ int main() {
             if (led_on_down) {
                 if (led_on_down_cnt < settings->led_count) {
                     if (settings->use_emergency) {
-                        for (; led_on_down_cnt < settings->emergency_cnt[EMERGENCY_DOWN]; led_on_down_cnt++) {
+                        for (; (led_on_down_cnt < settings->emergency_cnt[EMERGENCY_DOWN]) &&
+                               (led_on_down_cnt < settings->led_count - 1);
+                             led_on_down_cnt++) {
                             stairway_leds_set_state(led_on_down_cnt, true, led_on_down_ts);
                         }
                     }

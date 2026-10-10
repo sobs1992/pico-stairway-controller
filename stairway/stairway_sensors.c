@@ -9,19 +9,61 @@
 #define MAX_RANGE        4000
 #define SIGNAL_THRESHOLD 15
 
-typedef enum { DEV_ID_MIN = 0, DEV_ID_UP = DEV_ID_MIN, DEV_ID_DOWN, DEV_ID_MAX } DevId;
-typedef enum { SM_MIN = 0, SM_DEV_ID_0_REQ = SM_MIN, SM_DEV_ID_0_WAIT, SM_DEV_ID_1_REQ, SM_DEV_ID_1_WAIT, SM_MAX } SM;
+#define SENSOR_PAYLOAD_LEN 12 /* 6 registers */
 
-static StairwaySensorsSettings sensors_settings = {0};
+#define POLL_INTERVAL_MS 40
+
+typedef enum { DEV_ID_MIN = 0, DEV_ID_UP = DEV_ID_MIN, DEV_ID_DOWN, DEV_ID_MAX } DevId;
+
+// Raw values indexed by physical sensor (before swap)
 static StairwaySensorsGet sensors_values = {0};
 static bool dev_error[DEV_ID_MAX] = {false};
 static Settings *settings = NULL;
 
+static const StairwaySensorType dev_first_sensor[DEV_ID_MAX] = {
+    [DEV_ID_UP] = STAIRWAY_SENS_UP_FIRST,
+    [DEV_ID_DOWN] = STAIRWAY_SENS_DOWN_FIRST,
+};
+
 #if !EMULATE_SENSORS
+static ErrCode sensor_parse(DevId dev, ModbusError status, uint8_t *raw_answer, uint8_t *payload, uint8_t payload_len) {
+    ErrCode err = ERR_SUCCESS;
+    if (status != MODBUS_ERR_SUCCESS) {
+        dev_error[dev] = true;
+        RETURN_IF_ERROR(ERR_FAIL);
+    }
+
+    switch (raw_answer[1]) {
+        case 3:
+        case 4: {
+            RETURN_IF_COND(payload_len < SENSOR_PAYLOAD_LEN, ERR_FAIL);
+            dev_error[dev] = false;
+            uint32_t first = dev_first_sensor[dev];
+            uint32_t second = first + 1;
+            uint16_t error = (payload[10] << 8) | payload[11];
+            sensors_values.dist[first] = (payload[2] << 8) | payload[3];
+            sensors_values.dist[second] = (payload[4] << 8) | payload[5];
+            sensors_values.signal[first] = (payload[6] << 8) | payload[7];
+            sensors_values.signal[second] = (payload[8] << 8) | payload[9];
+            sensors_values.error[first] = (error & 0x01) == 0x01;
+            sensors_values.error[second] = (error & 0x02) == 0x02;
+        } break;
+        default: {
+        } break;
+    }
+
+    return err;
+}
+
 static ErrCode sensor_up_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                            uint8_t payload_len);
+                            uint8_t payload_len) {
+    return sensor_parse(DEV_ID_UP, status, raw_answer, payload, payload_len);
+}
+
 static ErrCode sensor_down_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                              uint8_t payload_len);
+                              uint8_t payload_len) {
+    return sensor_parse(DEV_ID_DOWN, status, raw_answer, payload, payload_len);
+}
 
 static const ModbusMasterRequest request[DEV_ID_MAX] = {
     [DEV_ID_UP] =
@@ -43,81 +85,14 @@ static const ModbusMasterRequest request[DEV_ID_MAX] = {
             .cb = sensor_down_cb,
         },
 };
-
-static ErrCode sensor_up_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                            uint8_t payload_len) {
-    ErrCode err = ERR_SUCCESS;
-    if (status != MODBUS_ERR_SUCCESS) {
-        dev_error[DEV_ID_UP] = true;
-        RETURN_IF_ERROR(ERR_FAIL);
-    }
-
-    switch (raw_answer[1]) {
-        case 3:
-        case 4: {
-            RETURN_IF_COND(payload_len == 0, ERR_FAIL);
-            uint16_t error = (payload[10] << 8) | payload[11];
-            sensors_values.dist[STAIRWAY_SENS_UP_FIRST] = (payload[2] << 8) | payload[3];
-            sensors_values.dist[STAIRWAY_SENS_UP_SECOND] = (payload[4] << 8) | payload[5];
-            sensors_values.signal[STAIRWAY_SENS_UP_FIRST] = (payload[6] << 8) | payload[7];
-            sensors_values.signal[STAIRWAY_SENS_UP_SECOND] = (payload[8] << 8) | payload[9];
-            sensors_values.error[STAIRWAY_SENS_UP_FIRST] = (error & 0x01) == 0x01;
-            sensors_values.error[STAIRWAY_SENS_UP_SECOND] = (error & 0x02) == 0x02;
-            sensors_values.state[STAIRWAY_SENS_UP_FIRST] =
-                sensors_values.dist[STAIRWAY_SENS_UP_FIRST] < sensors_settings.trigger_value[STAIRWAY_SENS_UP_FIRST];
-            sensors_values.state[STAIRWAY_SENS_UP_SECOND] =
-                sensors_values.dist[STAIRWAY_SENS_UP_SECOND] < sensors_settings.trigger_value[STAIRWAY_SENS_UP_SECOND];
-            dev_error[DEV_ID_UP] = false;
-        } break;
-        default: {
-        } break;
-    }
-
-    return err;
-}
-
-static ErrCode sensor_down_cb(ModbusError status, uint8_t *raw_answer, uint16_t raw_len, uint8_t *payload,
-                              uint8_t payload_len) {
-    ErrCode err = ERR_SUCCESS;
-    if (status != MODBUS_ERR_SUCCESS) {
-        dev_error[DEV_ID_DOWN] = true;
-        RETURN_IF_ERROR(ERR_FAIL);
-    }
-
-    switch (raw_answer[1]) {
-        case 3:
-        case 4: {
-            RETURN_IF_COND(payload_len == 0, ERR_FAIL);
-            uint16_t error = (payload[10] << 8) | payload[11];
-            sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST] = (payload[2] << 8) | payload[3];
-            sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND] = (payload[4] << 8) | payload[5];
-            sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST] = (payload[6] << 8) | payload[7];
-            sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND] = (payload[8] << 8) | payload[9];
-            sensors_values.error[STAIRWAY_SENS_DOWN_FIRST] = (error & 0x01) == 0x01;
-            sensors_values.error[STAIRWAY_SENS_DOWN_SECOND] = (error & 0x02) == 0x02;
-            sensors_values.state[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST] <
-                                                             sensors_settings.trigger_value[STAIRWAY_SENS_DOWN_FIRST];
-            sensors_values.state[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND] <
-                                                              sensors_settings.trigger_value[STAIRWAY_SENS_DOWN_SECOND];
-            dev_error[DEV_ID_DOWN] = false;
-        } break;
-        default: {
-        } break;
-    }
-
-    return err;
-}
 #endif
 
-ErrCode stairway_sensors_init(StairwaySensorsSettings *s) {
+ErrCode stairway_sensors_init(void) {
     ErrCode err = ERR_SUCCESS;
 
-    RETURN_IF_COND(s == NULL, ERR_PARAM_IS_NULL);
-
     settings = settings_get();
-    sensors_settings = *s;
 #if !EMULATE_SENSORS
-    modbus_master_init();
+    RETURN_IF_ERROR(modbus_master_init());
 #endif
 
     return err;
@@ -127,140 +102,50 @@ ErrCode stairway_sensors_routine(void) {
     ErrCode err = ERR_SUCCESS;
 
 #if !EMULATE_SENSORS
-    static uint32_t dt = 0;
-    static SM sm = SM_DEV_ID_0_REQ;
+    static uint64_t request_ts = 0;
+    static DevId next_dev = DEV_ID_MIN;
 
     modbus_master_routine();
-    if (get_time_ms() - dt > 20) {
-        switch (sm) {
-            case SM_DEV_ID_0_REQ: {
-                modbus_master_send(&request[DEV_ID_UP]);
-                sm = SM_DEV_ID_0_WAIT;
-            } break;
-            case SM_DEV_ID_0_WAIT: {
-                if (!modbus_master_get_busy()) {
-                    sm = SM_DEV_ID_1_REQ;
-                }
-            } break;
-            case SM_DEV_ID_1_REQ: {
-                modbus_master_send(&request[DEV_ID_DOWN]);
-                sm = SM_DEV_ID_1_WAIT;
-            } break;
-            case SM_DEV_ID_1_WAIT: {
-                if (!modbus_master_get_busy()) {
-                    sm = SM_DEV_ID_0_REQ;
-                }
-            } break;
-            default: {
-                sm = SM_DEV_ID_0_REQ;
-            } break;
-        }
-
-        dt = get_time_ms();
+    uint64_t ts = get_time_ms();
+    if ((!modbus_master_get_busy()) && ((ts - request_ts) >= POLL_INTERVAL_MS)) {
+        request_ts = ts;
+        modbus_master_send(&request[next_dev]);
+        next_dev = (next_dev + 1) % DEV_ID_MAX;
     }
 #endif
 
     return err;
 }
 
+// Fills logical sensors (after swap) of one device
+static void fill_device_values(StairwaySensorsGet *value, DevId dev, bool swap) {
+    uint32_t first = dev_first_sensor[dev];
+    bool error = dev_error[dev];
+    for (uint32_t i = 0; i < 2; i++) {
+        uint32_t dst = first + i;
+        uint32_t src = swap ? (first + 1 - i) : dst;
+        if (error) {
+            value->error[dst] = true;
+            value->state[dst] = false;
+            value->dist[dst] = 0;
+            value->signal[dst] = 0;
+            continue;
+        }
+        value->error[dst] = sensors_values.error[src];
+        value->signal[dst] = sensors_values.signal[src];
+        // Weak signal means the measurement is unreliable: treat it as "nothing in range"
+        value->dist[dst] = (sensors_values.signal[src] >= SIGNAL_THRESHOLD) ? sensors_values.dist[src] : MAX_RANGE;
+        // Trigger distance is configured per logical sensor (after swap)
+        value->state[dst] = value->dist[dst] < settings->dist_trigger[dst];
+    }
+}
+
 ErrCode stairway_sensors_get(StairwaySensorsGet *value) {
     ErrCode err = ERR_SUCCESS;
     RETURN_IF_COND(value == NULL, ERR_PARAM_IS_NULL);
 
-    if (dev_error[DEV_ID_UP]) {
-        value->error[STAIRWAY_SENS_UP_FIRST] = true;
-        value->error[STAIRWAY_SENS_UP_SECOND] = true;
-        value->state[STAIRWAY_SENS_UP_FIRST] = false;
-        value->state[STAIRWAY_SENS_UP_SECOND] = false;
-        value->dist[STAIRWAY_SENS_UP_FIRST] = 0;
-        value->dist[STAIRWAY_SENS_UP_SECOND] = 0;
-        value->signal[STAIRWAY_SENS_UP_FIRST] = 0;
-        value->signal[STAIRWAY_SENS_UP_SECOND] = 0;
-    } else {
-        if (!settings->sensor_up_swap) {
-            value->error[STAIRWAY_SENS_UP_FIRST] = sensors_values.error[STAIRWAY_SENS_UP_FIRST];
-            value->error[STAIRWAY_SENS_UP_SECOND] = sensors_values.error[STAIRWAY_SENS_UP_SECOND];
-            value->state[STAIRWAY_SENS_UP_FIRST] = sensors_values.state[STAIRWAY_SENS_UP_FIRST];
-            value->state[STAIRWAY_SENS_UP_SECOND] = sensors_values.state[STAIRWAY_SENS_UP_SECOND];
-            value->signal[STAIRWAY_SENS_UP_FIRST] = sensors_values.signal[STAIRWAY_SENS_UP_FIRST];
-            value->signal[STAIRWAY_SENS_UP_SECOND] = sensors_values.signal[STAIRWAY_SENS_UP_SECOND];
-            if (sensors_values.signal[STAIRWAY_SENS_UP_FIRST] >= SIGNAL_THRESHOLD) {
-                value->dist[STAIRWAY_SENS_UP_FIRST] = sensors_values.dist[STAIRWAY_SENS_UP_FIRST];
-            } else {
-                value->dist[STAIRWAY_SENS_UP_FIRST] = MAX_RANGE;
-            }
-            if (sensors_values.signal[STAIRWAY_SENS_UP_SECOND] >= SIGNAL_THRESHOLD) {
-                value->dist[STAIRWAY_SENS_UP_SECOND] = sensors_values.dist[STAIRWAY_SENS_UP_SECOND];
-            } else {
-                value->dist[STAIRWAY_SENS_UP_SECOND] = MAX_RANGE;
-            }
-        } else {
-            value->error[STAIRWAY_SENS_UP_FIRST] = sensors_values.error[STAIRWAY_SENS_UP_SECOND];
-            value->error[STAIRWAY_SENS_UP_SECOND] = sensors_values.error[STAIRWAY_SENS_UP_FIRST];
-            value->state[STAIRWAY_SENS_UP_FIRST] = sensors_values.state[STAIRWAY_SENS_UP_SECOND];
-            value->state[STAIRWAY_SENS_UP_SECOND] = sensors_values.state[STAIRWAY_SENS_UP_FIRST];
-            value->signal[STAIRWAY_SENS_UP_FIRST] = sensors_values.signal[STAIRWAY_SENS_UP_SECOND];
-            value->signal[STAIRWAY_SENS_UP_SECOND] = sensors_values.signal[STAIRWAY_SENS_UP_FIRST];
-            if (sensors_values.signal[STAIRWAY_SENS_UP_FIRST] >= SIGNAL_THRESHOLD) {
-                value->dist[STAIRWAY_SENS_UP_SECOND] = sensors_values.dist[STAIRWAY_SENS_UP_SECOND];
-            } else {
-                value->dist[STAIRWAY_SENS_UP_SECOND] = MAX_RANGE;
-            }
-            if (sensors_values.signal[STAIRWAY_SENS_UP_SECOND] >= SIGNAL_THRESHOLD) {
-                value->dist[STAIRWAY_SENS_UP_FIRST] = sensors_values.dist[STAIRWAY_SENS_UP_FIRST];
-            } else {
-                value->dist[STAIRWAY_SENS_UP_FIRST] = MAX_RANGE;
-            }
-        }
-    }
+    fill_device_values(value, DEV_ID_UP, settings->sensor_up_swap);
+    fill_device_values(value, DEV_ID_DOWN, settings->sensor_down_swap);
 
-    if (dev_error[DEV_ID_DOWN]) {
-        value->error[STAIRWAY_SENS_DOWN_FIRST] = true;
-        value->error[STAIRWAY_SENS_DOWN_SECOND] = true;
-        value->state[STAIRWAY_SENS_DOWN_FIRST] = false;
-        value->state[STAIRWAY_SENS_DOWN_SECOND] = false;
-        value->dist[STAIRWAY_SENS_DOWN_FIRST] = 0;
-        value->dist[STAIRWAY_SENS_DOWN_SECOND] = 0;
-        value->signal[STAIRWAY_SENS_DOWN_FIRST] = 0;
-        value->signal[STAIRWAY_SENS_DOWN_SECOND] = 0;
-    } else {
-        if (!settings->sensor_down_swap) {
-            value->error[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.error[STAIRWAY_SENS_DOWN_FIRST];
-            value->error[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.error[STAIRWAY_SENS_DOWN_SECOND];
-            value->state[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.state[STAIRWAY_SENS_DOWN_FIRST];
-            value->state[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.state[STAIRWAY_SENS_DOWN_SECOND];
-            value->signal[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST];
-            value->signal[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND];
-            if (sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST] >= SIGNAL_THRESHOLD) {
-                value->dist[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST];
-            } else {
-                value->dist[STAIRWAY_SENS_DOWN_FIRST] = MAX_RANGE;
-            }
-            if (sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND] >= SIGNAL_THRESHOLD) {
-                value->dist[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND];
-            } else {
-                value->dist[STAIRWAY_SENS_DOWN_SECOND] = MAX_RANGE;
-            }
-        } else {
-            value->error[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.error[STAIRWAY_SENS_DOWN_SECOND];
-            value->error[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.error[STAIRWAY_SENS_DOWN_FIRST];
-            value->state[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.state[STAIRWAY_SENS_DOWN_SECOND];
-            value->state[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.state[STAIRWAY_SENS_DOWN_FIRST];
-            value->dist[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND];
-            value->dist[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST];
-            value->signal[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND];
-            value->signal[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST];
-            if (sensors_values.signal[STAIRWAY_SENS_DOWN_FIRST] >= SIGNAL_THRESHOLD) {
-                value->dist[STAIRWAY_SENS_DOWN_SECOND] = sensors_values.dist[STAIRWAY_SENS_DOWN_SECOND];
-            } else {
-                value->dist[STAIRWAY_SENS_DOWN_SECOND] = MAX_RANGE;
-            }
-            if (sensors_values.signal[STAIRWAY_SENS_DOWN_SECOND] >= SIGNAL_THRESHOLD) {
-                value->dist[STAIRWAY_SENS_DOWN_FIRST] = sensors_values.dist[STAIRWAY_SENS_DOWN_FIRST];
-            } else {
-                value->dist[STAIRWAY_SENS_DOWN_FIRST] = MAX_RANGE;
-            }
-        }
-    }
     return err;
 }

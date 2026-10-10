@@ -4,14 +4,21 @@
 #include "api/stairway_leds.h"
 #include "api/stairway_sensors.h"
 
-#define FLASH_SIZE      2 * 1024 * 1024
-#define SETTINGS_OFFSET (FLASH_SIZE - FLASH_SECTOR_SIZE)
+#define SETTINGS_OFFSET (PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE)
 
-#define SSID_MAX_LEN 11 /* 10 chars + '\0' */
-#define PASS_MAX_LEN 11 /* 10 chars + '\0' */
+#define SETTINGS_MAGIC   0xDEADBEED
+#define SETTINGS_VERSION 2
+
+#define SSID_MAX_LEN 33 /* 32 chars + '\0' */
+#define PASS_MIN_LEN 8  /* WPA2 requirement */
+#define PASS_MAX_LEN 64 /* 63 chars + '\0' */
+
+#define LED_COUNT_MAX 1000
 
 typedef struct {
     uint32_t magic;
+    uint16_t version;
+    uint16_t size;
 
     bool use_light_sensor;
     uint32_t light_sensor_day_value;
@@ -38,9 +45,15 @@ typedef struct {
     char pass[PASS_MAX_LEN];
 
     bool ap_state;
+
+    uint32_t crc; // must be the last field
 } Settings;
 
 ErrCode settings_init(void);
 ErrCode settings_default(bool restart);
 Settings *settings_get(void);
 ErrCode settings_write(void);
+// Checks values of s for consistency. Returns ERR_SUCCESS if settings can be applied.
+ErrCode settings_validate(const Settings *s);
+// Validates s, copies it to the active settings and writes them to flash.
+ErrCode settings_apply(const Settings *s);

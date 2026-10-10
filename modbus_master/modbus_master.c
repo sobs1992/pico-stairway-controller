@@ -17,7 +17,7 @@
 static uint8_t send_buf[SEND_BUF_SIZE] = {0};
 static uint32_t send_counter = 0;
 static uint8_t receive_buf[RECEIVE_BUF_SIZE] = {0};
-static uint32_t receive_counter = 0;
+static volatile uint32_t receive_counter = 0; // modified from UART IRQ
 static uint32_t answer_len = 0;
 static uint64_t send_ts = 0;
 static bool busy = false;
@@ -200,13 +200,11 @@ ErrCode modbus_master_routine(void) {
     ErrCode err = ERR_SUCCESS;
     RETURN_IF_COND_(!busy, err);
     uint64_t dt = get_time_ms() - send_ts;
-    if ((receive_counter >= answer_len) || (receive_counter >= SEND_BUF_SIZE)) {
-        //    printf("DT: %d\n", dt);
+    if ((receive_counter >= answer_len) || (receive_counter >= RECEIVE_BUF_SIZE - 1)) {
         decode_modbus(receive_buf, receive_counter);
         busy = false;
         gpio_put(LED_PIN, 0);
     } else if (dt > last_request.timeout) {
-        //    printf("TIMEOUT (%d > %d)\n", dt, last_request.timeout);
         if (last_request.cb) {
             last_request.cb(MODBUS_ERR_TIMEOUT, NULL, 0, NULL, 0);
         }

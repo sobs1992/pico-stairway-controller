@@ -6,6 +6,7 @@
 #include "api/settings_api.h"
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 typedef struct {
     uint8_t led_value;
@@ -70,15 +71,32 @@ ErrCode stairway_leds_set_state(uint32_t index, bool state, uint64_t event_ts) {
     return err;
 }
 
+static ErrCode stairway_leds_resize(uint32_t led_count) {
+    ErrCode err = ERR_SUCCESS;
+
+    LedState *new_buf = realloc(buf, sizeof(LedState) * led_count);
+    RETURN_IF_COND(new_buf == NULL, ERR_MEM_ALLOC_FAIL);
+    buf = new_buf;
+    memset(buf, 0, sizeof(LedState) * led_count);
+    RETURN_IF_ERROR(ws2812_set_led_count(&ws2812_handler, led_count));
+    INFO("Leds count changed to %" PRIu32, led_count);
+
+    return err;
+}
+
 ErrCode stairway_leds_refresh(void) {
     ErrCode err = ERR_SUCCESS;
     bool leds_updated = false;
+
+    if (settings->led_count != ws2812_handler.led_count) {
+        RETURN_IF_ERROR(stairway_leds_resize(settings->led_count));
+    }
 
     for (uint32_t i = 0; i < ws2812_handler.led_count; i++) {
         if (((buf[i].state) && (buf[i].led_value != settings->led_on_value)) ||
             ((emergency_state[EMERGENCY_DOWN]) && (i < settings->emergency_cnt[EMERGENCY_DOWN])) ||
             ((emergency_state[EMERGENCY_UP]) &&
-             (i > ws2812_handler.led_count - settings->emergency_cnt[EMERGENCY_UP] - 1))) {
+             (i + settings->emergency_cnt[EMERGENCY_UP] >= ws2812_handler.led_count))) {
             int16_t temp = (int16_t)buf[i].led_value + settings->led_on_step;
             if (temp > settings->led_on_value) {
                 buf[i].led_value = settings->led_on_value;

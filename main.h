@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum {
     DETECTOR_STATE_MIN = 0,
@@ -53,5 +54,6 @@ typedef struct {
 } Status;
 
 Status *status_get(void);
-uint64_t get_time_us(void);
 uint64_t get_time_ms(void);
+// Reboots the device from the main loop after delay_ms (lets pending network responses go out).
+void reboot_request(uint32_t delay_ms);

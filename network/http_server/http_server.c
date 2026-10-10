@@ -1,280 +1,287 @@
 #define FILE_ID "NN02"
 
 #include <string.h>
+#include <strings.h>
+#include <stdlib.h>
 #include "http_server.h"
 #include "content.h"
 #include "pico/cyw43_arch.h"
 
-#define TCP_PORT    80
-#define POLL_TIME_S 5
-#define HTTP_GET    "GET"
-#define HTTP_POST   "POST"
+#define TCP_PORT 80
+// tcp_poll() interval is measured in TCP coarse timer ticks (500 ms)
+#define POLL_INTERVAL_TICKS 2
+// Close a connection without any rx/tx progress after this number of polls (~10 s)
+#define IDLE_POLLS_MAX 10
 
-#define CHUNK_SIZE 1024
+#define HTTP_GET            "GET "
+#define HTTP_POST           "POST "
+#define HTTP_CONTENT_LENGTH "Content-Length:"
+
+#define HTTP_REQUEST_MAX_SIZE 2048
 
 typedef struct {
-    char data[HTTP_HEADER_MAX_SIZE];
-    int data_len;
-    int content_len;
-    int content_len_total;
+    char data[HTTP_REQUEST_MAX_SIZE + 1]; // + '\0'
+    uint32_t data_len;
+    uint32_t body_offset;
+    uint32_t content_len;
     bool header_complete;
+    bool processed;
 } HttpRequest;
 
 typedef struct TCP_CONNECT_STATE_T_ {
     struct tcp_pcb *pcb;
     HttpRequest request;
     ContentResponse response;
-    int sent_len;
+    uint32_t queued_len; // bytes passed to tcp_write()
+    uint32_t acked_len;  // bytes acknowledged by the client
+    uint32_t idle_polls;
     ip_addr_t *gw;
 } TCP_CONNECT_STATE_T;
 
-static err_t tcp_close_client_connection(TCP_CONNECT_STATE_T *con_state, struct tcp_pcb *client_pcb, err_t close_err);
-
-static err_t tcp_server_sent(void *arg, struct tcp_pcb *pcb, u16_t len) {
-    ErrCode err = ERR_SUCCESS;
-
-    TCP_CONNECT_STATE_T *con_state = (TCP_CONNECT_STATE_T *)arg;
-    con_state->sent_len += len;
-
-    char *data = NULL;
-    uint32_t data_len = 0;
-    if (con_state->sent_len < con_state->response.header_len) {
-        data_len = con_state->response.header_len - con_state->sent_len;
-        if (data_len > CHUNK_SIZE) {
-            data_len = CHUNK_SIZE;
-        }
-        data = &con_state->response.header[con_state->sent_len];
-    } else {
-        uint32_t sent_body_len = con_state->sent_len - con_state->response.header_len;
-        if (sent_body_len < con_state->response.body_len) {
-            data_len = con_state->response.body_len - sent_body_len;
-            if (data_len > CHUNK_SIZE) {
-                data_len = CHUNK_SIZE;
-            }
-            data = &con_state->response.body[sent_body_len];
-        } else {
-            if (con_state->response.header) {
-                free(con_state->response.header);
-            }
-            if (con_state->response.body) {
-                free(con_state->response.body);
-            }
-            memset(&con_state->response, 0, sizeof(con_state->response));
-            return tcp_close_client_connection(con_state, pcb, ERR_OK);
-        }
+static void con_state_free(TCP_CONNECT_STATE_T *con_state) {
+    if (con_state) {
+        content_response_free(&con_state->response);
+        free(con_state);
     }
-
-    TO_EXIT_IF_COND(data == NULL, ERR_FAIL);
-    err_t tcp_err = tcp_write(con_state->pcb, data, data_len, TCP_WRITE_FLAG_COPY);
-    if (tcp_err == ERR_OK) {
-        tcp_output(con_state->pcb);
-        return ERR_OK;
-    } else {
-        INFO("tcp_write error: %d", tcp_err);
-        TO_EXIT_IF_ERROR(ERR_FAIL);
-    }
-
-    return ERR_OK;
-
-EXIT:
-    if (con_state->response.header) {
-        free(con_state->response.header);
-    }
-    if (con_state->response.body) {
-        free(con_state->response.body);
-    }
-    memset(&con_state->response, 0, sizeof(con_state->response));
-    return tcp_close(con_state->pcb);
 }
 
-static err_t send_tcp_data(TCP_CONNECT_STATE_T *con_state) {
-    ErrCode err = ERR_SUCCESS;
-    err_t tcp_err = ERR_OK;
+// Closes the client connection and frees its state. Returns the value the lwIP callback must return.
+static err_t tcp_close_client_connection(TCP_CONNECT_STATE_T *con_state, struct tcp_pcb *client_pcb) {
+    err_t ret = ERR_OK;
+    if (client_pcb) {
+        tcp_arg(client_pcb, NULL);
+        tcp_poll(client_pcb, NULL, 0);
+        tcp_sent(client_pcb, NULL);
+        tcp_recv(client_pcb, NULL);
+        tcp_err(client_pcb, NULL);
+        err_t err = tcp_close(client_pcb);
+        if (err != ERR_OK) {
+            INFO("Close failed %d, calling abort", err);
+            tcp_abort(client_pcb);
+            ret = ERR_ABRT;
+        }
+    }
+    con_state_free(con_state);
+    return ret;
+}
 
-    con_state->sent_len = 0;
-    size_t first_chunk = con_state->response.header_len;
-    if (con_state->response.header_len > CHUNK_SIZE) {
-        first_chunk = CHUNK_SIZE;
+static uint32_t response_total_len(const ContentResponse *r) {
+    return r->header_len + r->body_len;
+}
+
+// Queues as much of the response as the TCP send buffer allows. The rest is sent from the sent callback.
+static err_t send_more(TCP_CONNECT_STATE_T *con_state) {
+    ContentResponse *r = &con_state->response;
+    uint32_t total = response_total_len(r);
+
+    while (con_state->queued_len < total) {
+        uint32_t avail = tcp_sndbuf(con_state->pcb);
+        if (avail == 0) {
+            break;
+        }
+
+        const char *data = NULL;
+        uint32_t len = 0;
+        u8_t flags = TCP_WRITE_FLAG_COPY;
+        if (con_state->queued_len < r->header_len) {
+            data = &r->header[con_state->queued_len];
+            len = r->header_len - con_state->queued_len;
+        } else {
+            uint32_t offset = con_state->queued_len - r->header_len;
+            data = &r->body[offset];
+            len = r->body_len - offset;
+            if (r->body_static) {
+                flags = 0; // data stays valid, no need to copy it
+            }
+        }
+        if (len > avail) {
+            len = avail;
+        }
+        if (len > UINT16_MAX) {
+            len = UINT16_MAX;
+        }
+        if (con_state->queued_len + len < total) {
+            flags |= TCP_WRITE_FLAG_MORE;
+        }
+
+        err_t tcp_err = tcp_write(con_state->pcb, data, len, flags);
+        if (tcp_err == ERR_MEM) {
+            break; // queue is full, continue from the sent/poll callback
+        }
+        if (tcp_err != ERR_OK) {
+            INFO("tcp_write error: %d", tcp_err);
+            return tcp_err;
+        }
+        con_state->queued_len += len;
     }
 
-    tcp_err = tcp_write(con_state->pcb, con_state->response.header, first_chunk, TCP_WRITE_FLAG_COPY);
-    TO_EXIT_IF_COND(tcp_err != ERR_OK, ERR_FAIL);
+    return tcp_output(con_state->pcb);
+}
 
-    tcp_err = tcp_output(con_state->pcb);
-    TO_EXIT_IF_COND(tcp_err != ERR_OK, ERR_FAIL);
-#if 0
-    INFO("Started sending %" PRIu32 " bytes (first chunk: %d)",
-         con_state->response.header_len + con_state->response.body_len, first_chunk);
-#endif
+static err_t tcp_server_sent(void *arg, struct tcp_pcb *pcb, u16_t len) {
+    TCP_CONNECT_STATE_T *con_state = (TCP_CONNECT_STATE_T *)arg;
+    con_state->acked_len += len;
+    con_state->idle_polls = 0;
+
+    if (con_state->acked_len >= response_total_len(&con_state->response)) {
+        return tcp_close_client_connection(con_state, pcb);
+    }
+    if (send_more(con_state) != ERR_OK) {
+        return tcp_close_client_connection(con_state, pcb);
+    }
     return ERR_OK;
+}
+
+static uint32_t get_content_length(const char *header) {
+    const char *line = header;
+    while (line && *line) {
+        if (strncasecmp(line, HTTP_CONTENT_LENGTH, sizeof(HTTP_CONTENT_LENGTH) - 1) == 0) {
+            return strtoul(line + sizeof(HTTP_CONTENT_LENGTH) - 1, NULL, 10);
+        }
+        line = strchr(line, '\n');
+        if (line) {
+            line++;
+        }
+    }
+    return 0;
+}
+
+// Cuts "METHOD /path HTTP/1.1" to "/path" (null terminated) and returns it
+static char *get_request_path(char *header, size_t method_len) {
+    char *path = header + method_len;
+    char *end = strpbrk(path, " \r\n");
+    if (end) {
+        *end = '\0';
+    }
+    return path;
+}
+
+static void free_get_params(ContentGetRequest *req) {
+    if (req->params) {
+        for (uint32_t i = 0; i < req->params_n; i++) {
+            free(req->params[i]);
+        }
+        free(req->params);
+        req->params = NULL;
+    }
+    req->params_n = 0;
+}
+
+static ErrCode parse_get_params(char *params, ContentGetRequest *req) {
+    ErrCode err = ERR_SUCCESS;
+
+    uint32_t params_cnt = 1;
+    for (char *c = params; *c; c++) {
+        if (*c == '&') {
+            params_cnt++;
+            *c = '\0';
+        }
+    }
+    req->params = calloc(params_cnt, sizeof(req->params[0]));
+    RETURN_IF_COND(req->params == NULL, ERR_MEM_ALLOC_FAIL);
+    for (uint32_t i = 0; i < params_cnt; i++) {
+        size_t len = strlen(params);
+        req->params[i] = strdup(params);
+        RETURN_IF_COND(req->params[i] == NULL, ERR_MEM_ALLOC_FAIL);
+        req->params_n++;
+        params += len + 1;
+    }
+
+    return err;
+}
+
+static ErrCode handle_request(TCP_CONNECT_STATE_T *con_state) {
+    ErrCode err = ERR_SUCCESS;
+    HttpRequest *request = &con_state->request;
+    char *header = request->data;
+    ContentGetRequest req_get = {0};
+
+    if (strncmp(header, HTTP_GET, sizeof(HTTP_GET) - 1) == 0) {
+        req_get.request = get_request_path(header, sizeof(HTTP_GET) - 1);
+        char *params = strchr(req_get.request, '?');
+        if (params) {
+            *params++ = '\0';
+            TO_EXIT_IF_ERROR(parse_get_params(params, &req_get));
+        }
+        TO_EXIT_IF_ERROR(get_content(con_state->gw, &req_get, &con_state->response));
+    } else if (strncmp(header, HTTP_POST, sizeof(HTTP_POST) - 1) == 0) {
+        ContentPostRequest req_post = {
+            .request = get_request_path(header, sizeof(HTTP_POST) - 1),
+            .body = request->data + request->body_offset,
+            .body_len = request->content_len,
+        };
+        TO_EXIT_IF_ERROR(post_content(con_state->gw, &req_post, &con_state->response));
+    } else {
+        TO_EXIT_IF_ERROR(ERR_PARAM_INVALID);
+    }
+    TO_EXIT_IF_COND(con_state->response.header_len == 0, ERR_FAIL);
+
 EXIT:
-    if (con_state->response.header) {
-        free(con_state->response.header);
-    }
-    if (con_state->response.body) {
-        free(con_state->response.body);
-    }
-    memset(&con_state->response, 0, sizeof(con_state->response));
-    return tcp_err;
+    free_get_params(&req_get);
+    return err;
 }
 
 static err_t tcp_server_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t tcp_err) {
-    ErrCode err = ERR_SUCCESS;
     TCP_CONNECT_STATE_T *con_state = (TCP_CONNECT_STATE_T *)arg;
-    ContentGetRequest req_get = {0};
-    ContentPostRequest req_post = {0};
-    memset(&req_get, 0, sizeof(req_get));
-    memset(&req_post, 0, sizeof(req_post));
 
     if (!p) {
-        INFO("Connection closed");
-        return tcp_close_client_connection(con_state, pcb, ERR_OK);
+        return tcp_close_client_connection(con_state, pcb);
     }
-    assert(con_state && con_state->pcb == pcb);
-
-    if (p->tot_len > 0) {
-        char header_temp[HTTP_HEADER_MAX_SIZE];
-        int header_temp_size = p->tot_len > sizeof(header_temp) - 1 ? sizeof(header_temp) - 1 : p->tot_len;
-        pbuf_copy_partial(p, header_temp, header_temp_size, 0);
-        header_temp[header_temp_size] = '\0';
-#if 0
-        INFO("HEADER_TEMP: %s", header_temp);
-#endif
-        if (!con_state->request.header_complete) {
-            memcpy(con_state->request.data + con_state->request.data_len, header_temp, header_temp_size);
-            con_state->request.data_len += header_temp_size;
-            char *body_start = NULL;
-            char *header_end = strstr(con_state->request.data, "\n\n");
-            if (header_end) {
-                body_start = header_end += sizeof("\n\n") - 1;
-            } else {
-                header_end = strstr(con_state->request.data, "\r\n\r\n");
-                if (header_end) {
-                    body_start = header_end += sizeof("\r\n\r\n") - 1;
-                }
-            }
-
-            if (header_end) {
-                con_state->request.header_complete = true;
-                char *cl = strstr(con_state->request.data, "Content-Length:");
-                if (cl) {
-                    con_state->request.content_len_total = atoi(cl + 16);
-                    int body_len = strlen(body_start);
-                    if (body_len) {
-                        strcpy(con_state->request.data + con_state->request.data_len, body_start);
-                        con_state->request.data_len += body_len;
-                        con_state->request.content_len += body_len;
-                        con_state->request.data[con_state->request.data_len] = 0;
-                    }
-                }
-            }
-        } else {
-            if (con_state->request.content_len < con_state->request.content_len_total) {
-                memcpy(con_state->request.data + con_state->request.data_len, header_temp, header_temp_size);
-                con_state->request.data_len += header_temp_size;
-                con_state->request.content_len += header_temp_size;
-                con_state->request.data[con_state->request.data_len] = 0;
-            }
-        }
-        if ((con_state->request.header_complete) &&
-            (con_state->request.content_len == con_state->request.content_len_total)) {
-#if 0
-            INFO("Receive header: %s", con_state->request.data);
-#endif
-            // Handle GET request
-            if (strncmp(HTTP_GET, con_state->request.data, sizeof(HTTP_GET) - 1) == 0) {
-                req_get.request = con_state->request.data + sizeof(HTTP_GET); // + space;
-                char *end_req = strstr(req_get.request, "HTTP/");
-                if (end_req) {
-                    *end_req = 0;
-                }
-
-                char *params = strchr(req_get.request, '?');
-                if (params) {
-                    *params++ = 0;
-                    uint32_t params_cnt = 1;
-                    uint32_t len = strlen(params);
-                    for (uint32_t i = 0; i < len; i++) {
-                        if (params[i] == '&') {
-                            params_cnt++;
-                            params[i] = 0;
-                        }
-                    }
-                    req_get.params = malloc(sizeof(req_get.params[0]) * params_cnt);
-                    TO_EXIT_IF_COND(req_get.params == NULL, ERR_MEM_ALLOC_FAIL);
-                    memset(req_get.params, 0, sizeof(req_get.params[0]) * params_cnt);
-                    for (uint32_t i = 0; i < params_cnt; i++) {
-                        len = strlen(params);
-                        req_get.params[i] = malloc(len);
-                        TO_EXIT_IF_COND(req_get.params[i] == NULL, ERR_MEM_ALLOC_FAIL);
-                        strcpy(req_get.params[req_get.params_n], params);
-                        params += len + 1;
-                        req_get.params_n++;
-                    }
-                }
-
-                // Generate content
-                TO_EXIT_IF_ERROR(get_content(con_state->gw, &req_get, &con_state->response));
-                memset(&con_state->request, 0, sizeof(con_state->request));
-
-                if (req_get.params) {
-                    for (uint32_t i = 0; i < req_get.params_n; i++) {
-                        if (req_get.params[i]) {
-                            free(req_get.params[i]);
-                        }
-                    }
-                    free(req_get.params);
-                }
-
-                err_t send_err = send_tcp_data(con_state);
-                TO_EXIT_IF_COND(send_err != ERR_OK, ERR_FAIL);
-            } else if (strncmp(HTTP_POST, con_state->request.data, sizeof(HTTP_POST) - 1) == 0) {
-                req_post.request = con_state->request.data + sizeof(HTTP_POST); // + space;
-#if 0
-                INFO("POST REQUEST: %s\n", req_post.request);
-#endif
-                char *end_req = strstr(req_post.request, "HTTP/");
-                if (end_req) {
-                    *end_req++ = 0;
-                }
-                char *body_start = strstr(end_req, "\n\n");
-                if (body_start) {
-                    body_start += sizeof("\n\n") - 1;
-                } else {
-                    body_start = strstr(end_req, "\r\n\r\n");
-                    if (body_start) {
-                        body_start += sizeof("\r\n\r\n") - 1;
-                    }
-                }
-
-                TO_EXIT_IF_COND(body_start == NULL, ERR_FAIL);
-                req_post.body = body_start;
-                req_post.body_len = strlen(body_start);
-
-                // Generate content
-                TO_EXIT_IF_ERROR(post_content(con_state->gw, &req_post, &con_state->response));
-                memset(&con_state->request, 0, sizeof(con_state->request));
-
-                err_t send_err = send_tcp_data(con_state);
-                TO_EXIT_IF_COND(send_err != ERR_OK, ERR_FAIL);
-            }
-        }
-
-        tcp_recved(pcb, p->tot_len);
+    tcp_recved(pcb, p->tot_len);
+    if ((tcp_err != ERR_OK) || (con_state == NULL)) {
+        pbuf_free(p);
+        return tcp_close_client_connection(con_state, pcb);
     }
+    con_state->idle_polls = 0;
+
+    HttpRequest *request = &con_state->request;
+    if (request->processed) {
+        // Response is already being sent, ignore the rest
+        pbuf_free(p);
+        return ERR_OK;
+    }
+
+    if (p->tot_len > HTTP_REQUEST_MAX_SIZE - request->data_len) {
+        INFO("HTTP request is too large");
+        pbuf_free(p);
+        return tcp_close_client_connection(con_state, pcb);
+    }
+    pbuf_copy_partial(p, request->data + request->data_len, p->tot_len, 0);
+    request->data_len += p->tot_len;
+    request->data[request->data_len] = '\0';
     pbuf_free(p);
-    return ERR_OK;
-EXIT:
-    memset(&con_state->request, 0, sizeof(con_state->request));
-    if (req_get.params) {
-        for (uint32_t i = 0; i < req_get.params_n; i++) {
-            if (req_get.params[i]) {
-                free(req_get.params[i]);
-            }
+
+    if (!request->header_complete) {
+        size_t sep_len = sizeof("\r\n\r\n") - 1;
+        char *header_end = strstr(request->data, "\r\n\r\n");
+        if (header_end == NULL) {
+            sep_len = sizeof("\n\n") - 1;
+            header_end = strstr(request->data, "\n\n");
         }
-        free(req_get.params);
+        if (header_end == NULL) {
+            return ERR_OK; // wait for the rest of the header
+        }
+        *header_end = '\0';
+        request->body_offset = (header_end - request->data) + sep_len;
+        request->content_len = get_content_length(request->data);
+        if (request->content_len > HTTP_REQUEST_MAX_SIZE - request->body_offset) {
+            INFO("HTTP request body is too large");
+            return tcp_close_client_connection(con_state, pcb);
+        }
+        request->header_complete = true;
     }
-    return tcp_close_client_connection(con_state, pcb, ERR_CLSD);
+
+    if (request->data_len - request->body_offset < request->content_len) {
+        return ERR_OK; // wait for the rest of the body
+    }
+    request->data[request->body_offset + request->content_len] = '\0';
+    request->processed = true;
+
+    if ((handle_request(con_state) != ERR_SUCCESS) || (send_more(con_state) != ERR_OK)) {
+        return tcp_close_client_connection(con_state, pcb);
+    }
+
+    return ERR_OK;
 }
 
 static void tcp_server_close(TCP_SERVER_T *state) {
@@ -285,38 +292,23 @@ static void tcp_server_close(TCP_SERVER_T *state) {
     }
 }
 
-static err_t tcp_close_client_connection(TCP_CONNECT_STATE_T *con_state, struct tcp_pcb *client_pcb, err_t close_err) {
-    if (client_pcb) {
-        assert(con_state && con_state->pcb == client_pcb);
-        tcp_arg(client_pcb, NULL);
-        tcp_poll(client_pcb, NULL, 0);
-        tcp_sent(client_pcb, NULL);
-        tcp_recv(client_pcb, NULL);
-        tcp_err(client_pcb, NULL);
-        err_t err = tcp_close(client_pcb);
-        if (err != ERR_OK) {
-            INFO("Close failed %d, calling abort", err);
-            tcp_abort(client_pcb);
-            close_err = ERR_ABRT;
-        }
-        if (con_state) {
-            free(con_state);
-        }
-    }
-    return close_err;
-}
-
 static err_t tcp_server_poll(void *arg, struct tcp_pcb *pcb) {
     TCP_CONNECT_STATE_T *con_state = (TCP_CONNECT_STATE_T *)arg;
-    return tcp_close_client_connection(con_state, pcb, ERR_OK); // Just disconnect clent?
+    if ((con_state == NULL) || (++con_state->idle_polls > IDLE_POLLS_MAX)) {
+        return tcp_close_client_connection(con_state, pcb);
+    }
+    if ((con_state->request.processed) && (send_more(con_state) != ERR_OK)) {
+        return tcp_close_client_connection(con_state, pcb);
+    }
+    return ERR_OK;
 }
 
 static void tcp_server_err(void *arg, err_t err) {
-    TCP_CONNECT_STATE_T *con_state = (TCP_CONNECT_STATE_T *)arg;
+    // pcb is already freed by lwIP here, only the connection state must be released
     if (err != ERR_ABRT) {
         INFO("tcp_client_err_fn %d", err);
-        tcp_close_client_connection(con_state, con_state->pcb, err);
     }
+    con_state_free((TCP_CONNECT_STATE_T *)arg);
 }
 
 static err_t tcp_server_accept(void *arg, struct tcp_pcb *client_pcb, err_t err) {
@@ -330,16 +322,17 @@ static err_t tcp_server_accept(void *arg, struct tcp_pcb *client_pcb, err_t err)
     TCP_CONNECT_STATE_T *con_state = calloc(1, sizeof(TCP_CONNECT_STATE_T));
     if (!con_state) {
         INFO("Failed to allocate connect state");
-        return ERR_MEM;
+        tcp_abort(client_pcb);
+        return ERR_ABRT;
     }
-    con_state->pcb = client_pcb; // for checking
+    con_state->pcb = client_pcb;
     con_state->gw = &state->gw;
 
     // setup connection to client
     tcp_arg(client_pcb, con_state);
     tcp_sent(client_pcb, tcp_server_sent);
     tcp_recv(client_pcb, tcp_server_recv);
-    tcp_poll(client_pcb, tcp_server_poll, POLL_TIME_S);
+    tcp_poll(client_pcb, tcp_server_poll, POLL_INTERVAL_TICKS);
     tcp_err(client_pcb, tcp_server_err);
 
     return ERR_OK;
@@ -378,6 +371,7 @@ EXIT:
 ErrCode http_server_init(TCP_SERVER_T *tcp_server) {
     ErrCode err = ERR_SUCCESS;
 
+    RETURN_IF_COND(tcp_server == NULL, ERR_PARAM_IS_NULL);
     RETURN_IF_ERROR(tcp_server_open(tcp_server));
 
     return err;
@@ -385,6 +379,7 @@ ErrCode http_server_init(TCP_SERVER_T *tcp_server) {
 
 ErrCode http_server_deinit(TCP_SERVER_T *tcp_server) {
     ErrCode err = ERR_SUCCESS;
+    RETURN_IF_COND(tcp_server == NULL, ERR_PARAM_IS_NULL);
     tcp_server_close(tcp_server);
     return err;
 }

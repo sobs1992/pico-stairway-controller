@@ -1,12 +1,15 @@
 #define FILE_ID "NN04"
 
 #include "global.h"
-#include "api/settings_api.h"
+#include "settings.h"
 #include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stddef.h>
+#include <errno.h>
+#include <stdarg.h>
 
-#define JSON_TMP_BUF_SIZE 100
+#define JSON_KEY_BUF_SIZE 48
 
 typedef enum {
     STYPE_MIN = 0,
@@ -23,6 +26,7 @@ typedef struct {
     const SettingsType type;
     size_t offset;
     const uint32_t max_len; // relevant for STYPE_STRING only
+    const bool secret;      // value is never sent to the client, empty value means "don't change"
 } SettingsMap;
 
 static const SettingsMap settings_map[] = {
@@ -56,95 +60,112 @@ static const SettingsMap settings_map[] = {
     {.name = "emergency_cnt_up", .type = STYPE_UINT32, .offset = offsetof(Settings, emergency_cnt[EMERGENCY_UP])},
     {.name = "emergency_block_ms", .type = STYPE_UINT32, .offset = offsetof(Settings, emergency_block_ms)},
     {.name = "wifi_ssid", .type = STYPE_STRING, .offset = offsetof(Settings, ssid), .max_len = SSID_MAX_LEN},
-    {.name = "wifi_pass", .type = STYPE_STRING, .offset = offsetof(Settings, pass), .max_len = PASS_MAX_LEN},
+    {.name = "wifi_pass",
+     .type = STYPE_STRING,
+     .offset = offsetof(Settings, pass),
+     .max_len = PASS_MAX_LEN,
+     .secret = true},
 };
 
-static ErrCode jsonFindString(const char *in, const char *key, char *value, uint32_t buf_size) {
+// Returns pointer to the first non-space char of the value for "key", or NULL
+static const char *json_find_value(const char *in, const char *key) {
+    char pattern[JSON_KEY_BUF_SIZE];
+    int len = snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    if ((len <= 0) || (len >= sizeof(pattern))) {
+        return NULL;
+    }
+    const char *start = strstr(in, pattern);
+    if (start == NULL) {
+        return NULL;
+    }
+    start += len;
+    while ((*start == ' ') || (*start == '\t') || (*start == '\r') || (*start == '\n')) {
+        start++;
+    }
+    if (*start != ':') {
+        return NULL;
+    }
+    start++;
+    while ((*start == ' ') || (*start == '\t') || (*start == '\r') || (*start == '\n')) {
+        start++;
+    }
+    return start;
+}
+
+static ErrCode json_parse_string(const char *val, char *out, uint32_t buf_size) {
     ErrCode err = ERR_SUCCESS;
+    RETURN_IF_COND(*val != '"', ERR_PARAM_INVALID);
+    val++;
 
-    RETURN_IF_COND(in == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(key == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(value == NULL, ERR_PARAM_IS_NULL);
-
-    char *start = strstr(in, key);
-    RETURN_IF_COND(start == NULL, ERR_FAIL);
-    char *div = strchr(start, ':');
-    char *val_start = div + 2;
-    char *val_end = strpbrk(val_start, "\"\r\n,}\0");
-    RETURN_IF_COND(val_end == NULL, ERR_FAIL);
-    int len = val_end - val_start;
-    RETURN_IF_COND(len >= buf_size, ERR_FAIL);
-    memcpy(value, val_start, len);
-    value[len] = '\0';
+    uint32_t len = 0;
+    while (*val != '"') {
+        char c = *val++;
+        RETURN_IF_COND(c == '\0', ERR_PARAM_INVALID);
+        if (c == '\\') {
+            c = *val++;
+            RETURN_IF_COND((c != '"') && (c != '\\') && (c != '/'), ERR_PARAM_INVALID);
+        }
+        RETURN_IF_COND(len + 1 >= buf_size, ERR_OVERFLOW);
+        out[len++] = c;
+    }
+    out[len] = '\0';
 
     return err;
 }
 
-static ErrCode jsonFindBool(const char *in, const char *key, bool *value) {
+static ErrCode json_parse_bool(const char *val, bool *out) {
     ErrCode err = ERR_SUCCESS;
 
-    RETURN_IF_COND(in == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(key == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(value == NULL, ERR_PARAM_IS_NULL);
-
-    char *start = strstr(in, key);
-    RETURN_IF_COND(start == NULL, ERR_FAIL);
-    char *div = strchr(start, ':');
-    if (strncmp(div + 1, "true", strlen("true")) == 0) {
-        *value = true;
-    } else if (strncmp(div + 1, "false", strlen("false")) == 0) {
-        *value = false;
+    if (strncmp(val, "true", sizeof("true") - 1) == 0) {
+        *out = true;
+    } else if (strncmp(val, "false", sizeof("false") - 1) == 0) {
+        *out = false;
     } else {
-        RETURN_IF_ERROR(ERR_FAIL);
+        RETURN_IF_ERROR(ERR_PARAM_INVALID);
     }
 
     return err;
 }
 
-static ErrCode jsonFindUint8(const char *in, const char *key, uint8_t *value) {
+static ErrCode json_parse_uint(const char *val, uint32_t max, uint32_t *out) {
     ErrCode err = ERR_SUCCESS;
 
-    RETURN_IF_COND(in == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(key == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(value == NULL, ERR_PARAM_IS_NULL);
-
-    char *start = strstr(in, key);
-    RETURN_IF_COND(start == NULL, ERR_FAIL);
-    char *div = strchr(start, ':');
-    RETURN_IF_COND(div == NULL, ERR_FAIL);
-    *value = (uint8_t)strtoul(div + 1, NULL, 10);
+    RETURN_IF_COND((*val < '0') || (*val > '9'), ERR_PARAM_INVALID);
+    char *end = NULL;
+    errno = 0;
+    unsigned long v = strtoul(val, &end, 10);
+    RETURN_IF_COND((errno != 0) || (end == val) || (v > max), ERR_PARAM_INVALID);
+    *out = v;
 
     return err;
 }
 
-static ErrCode jsonFindUint16(const char *in, const char *key, uint16_t *value) {
+// Appends string with JSON escaping
+static ErrCode json_append_string(char *buf, uint32_t buf_size, uint32_t *pos, const char *str) {
     ErrCode err = ERR_SUCCESS;
 
-    RETURN_IF_COND(in == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(key == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(value == NULL, ERR_PARAM_IS_NULL);
-
-    char *start = strstr(in, key);
-    RETURN_IF_COND(start == NULL, ERR_FAIL);
-    char *div = strchr(start, ':');
-    RETURN_IF_COND(div == NULL, ERR_FAIL);
-    *value = (uint16_t)strtoul(div + 1, NULL, 10);
+    for (; *str; str++) {
+        bool escape = (*str == '"') || (*str == '\\');
+        RETURN_IF_COND(*pos + (escape ? 2 : 1) >= buf_size, ERR_OVERFLOW);
+        if (escape) {
+            buf[(*pos)++] = '\\';
+        }
+        buf[(*pos)++] = *str;
+    }
+    buf[*pos] = '\0';
 
     return err;
 }
 
-static ErrCode jsonFindUint32(const char *in, const char *key, uint32_t *value) {
+static ErrCode json_append(char *buf, uint32_t buf_size, uint32_t *pos, const char *fmt, ...) {
     ErrCode err = ERR_SUCCESS;
 
-    RETURN_IF_COND(in == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(key == NULL, ERR_PARAM_IS_NULL);
-    RETURN_IF_COND(value == NULL, ERR_PARAM_IS_NULL);
-
-    char *start = strstr(in, key);
-    RETURN_IF_COND(start == NULL, ERR_FAIL);
-    char *div = strchr(start, ':');
-    RETURN_IF_COND(div == NULL, ERR_FAIL);
-    *value = (uint32_t)strtoul(div + 1, NULL, 10);
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(buf + *pos, buf_size - *pos, fmt, args);
+    va_end(args);
+    RETURN_IF_COND((len < 0) || (*pos + len >= buf_size), ERR_OVERFLOW);
+    *pos += len;
 
     return err;
 }
@@ -152,106 +173,103 @@ static ErrCode jsonFindUint32(const char *in, const char *key, uint32_t *value) 
 ErrCode get_settings_json(char *buf, uint32_t buf_size) {
     ErrCode err = ERR_SUCCESS;
     RETURN_IF_COND(buf == NULL, ERR_PARAM_IS_NULL);
+    RETURN_IF_COND(buf_size == 0, ERR_PARAM_INVALID);
 
-    Settings *settings = settings_get();
-    uint8_t *p_settings = (uint8_t *)settings;
-    char tmp[JSON_TMP_BUF_SIZE] = {0};
-    uint32_t json_size = 0;
+    const uint8_t *p_settings = (const uint8_t *)settings_get();
+    uint32_t pos = 0;
+    buf[0] = '\0';
 
-    strcpy(buf, "{");
-    json_size++;
+    RETURN_IF_ERROR(json_append(buf, buf_size, &pos, "{"));
     for (uint32_t i = 0; i < ARRAY_SIZE(settings_map); i++) {
-        switch (settings_map[i].type) {
+        const SettingsMap *m = &settings_map[i];
+        const void *field = p_settings + m->offset;
+        const char *sep = (i < ARRAY_SIZE(settings_map) - 1) ? "," : "";
+        switch (m->type) {
             case STYPE_UINT32:
-                snprintf(tmp, sizeof(tmp), "\"%s\":%" PRIu32, settings_map[i].name,
-                         *(uint32_t *)(p_settings + settings_map[i].offset));
-                json_size += strlen(tmp);
-                RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
-                strcat(buf, tmp);
+                RETURN_IF_ERROR(
+                    json_append(buf, buf_size, &pos, "\"%s\":%" PRIu32 "%s", m->name, *(const uint32_t *)field, sep));
                 break;
             case STYPE_UINT16:
-                snprintf(tmp, sizeof(tmp), "\"%s\":%" PRIu16, settings_map[i].name,
-                         *(uint16_t *)(p_settings + settings_map[i].offset));
-                json_size += strlen(tmp);
-                RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
-                strcat(buf, tmp);
+                RETURN_IF_ERROR(
+                    json_append(buf, buf_size, &pos, "\"%s\":%" PRIu16 "%s", m->name, *(const uint16_t *)field, sep));
                 break;
             case STYPE_UINT8:
-                snprintf(tmp, sizeof(tmp), "\"%s\":%" PRIu8, settings_map[i].name,
-                         *(uint8_t *)(p_settings + settings_map[i].offset));
-                json_size += strlen(tmp);
-                RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
-                strcat(buf, tmp);
+                RETURN_IF_ERROR(
+                    json_append(buf, buf_size, &pos, "\"%s\":%" PRIu8 "%s", m->name, *(const uint8_t *)field, sep));
                 break;
             case STYPE_BOOL:
-                snprintf(tmp, sizeof(tmp), "\"%s\":%s", settings_map[i].name,
-                         (*(bool *)(p_settings + settings_map[i].offset)) ? "true" : "false");
-                json_size += strlen(tmp);
-                RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
-                strcat(buf, tmp);
+                RETURN_IF_ERROR(json_append(buf, buf_size, &pos, "\"%s\":%s%s", m->name,
+                                            (*(const bool *)field) ? "true" : "false", sep));
                 break;
             case STYPE_STRING:
-                snprintf(tmp, sizeof(tmp), "\"%s\":\"%s\"", settings_map[i].name,
-                         ((char *)(p_settings + settings_map[i].offset)));
-                json_size += strlen(tmp);
-                RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
-                strcat(buf, tmp);
+                RETURN_IF_ERROR(json_append(buf, buf_size, &pos, "\"%s\":\"", m->name));
+                if (!m->secret) {
+                    RETURN_IF_ERROR(json_append_string(buf, buf_size, &pos, (const char *)field));
+                }
+                RETURN_IF_ERROR(json_append(buf, buf_size, &pos, "\"%s", sep));
                 break;
             default:
-                LOG_IF_ERROR(ERR_FAIL);
+                RETURN_IF_ERROR(ERR_FAIL);
                 break;
         }
-        if (i < (ARRAY_SIZE(settings_map) - 1)) {
-            json_size++;
-            RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
-            strcat(buf, ",");
-        }
     }
-    json_size++;
-    RETURN_IF_COND(json_size > buf_size, ERR_FAIL);
-    strcat(buf, "}");
+    RETURN_IF_ERROR(json_append(buf, buf_size, &pos, "}"));
 
     return err;
 }
 
-ErrCode set_settings_json(char *buf, uint32_t buf_size) {
+ErrCode set_settings_json(const char *json) {
     ErrCode err = ERR_SUCCESS;
-    RETURN_IF_COND(buf == NULL, ERR_PARAM_IS_NULL);
+    RETURN_IF_COND(json == NULL, ERR_PARAM_IS_NULL);
 
-    Settings *settings = settings_get();
-    uint8_t *p_settings = (uint8_t *)settings;
+    // Parse into a copy: active settings are changed only if everything is valid
+    Settings new_settings = *settings_get();
+    uint8_t *p_settings = (uint8_t *)&new_settings;
 
     for (uint32_t i = 0; i < ARRAY_SIZE(settings_map); i++) {
-        switch (settings_map[i].type) {
+        const SettingsMap *m = &settings_map[i];
+        void *field = p_settings + m->offset;
+        const char *val = json_find_value(json, m->name);
+        if (val == NULL) {
+            INFO("Param %s not found", m->name);
+            continue;
+        }
+
+        uint32_t num = 0;
+        switch (m->type) {
             case STYPE_UINT32:
-                LOG_IF_ERROR(
-                    jsonFindUint32(buf, settings_map[i].name, (uint32_t *)(p_settings + settings_map[i].offset)));
+                TO_EXIT_IF_ERROR(json_parse_uint(val, UINT32_MAX, &num));
+                *(uint32_t *)field = num;
                 break;
             case STYPE_UINT16:
-                LOG_IF_ERROR(
-                    jsonFindUint16(buf, settings_map[i].name, (uint16_t *)(p_settings + settings_map[i].offset)));
+                TO_EXIT_IF_ERROR(json_parse_uint(val, UINT16_MAX, &num));
+                *(uint16_t *)field = num;
                 break;
             case STYPE_UINT8:
-                LOG_IF_ERROR(
-                    jsonFindUint8(buf, settings_map[i].name, (uint8_t *)(p_settings + settings_map[i].offset)));
+                TO_EXIT_IF_ERROR(json_parse_uint(val, UINT8_MAX, &num));
+                *(uint8_t *)field = num;
                 break;
             case STYPE_BOOL:
-                LOG_IF_ERROR(jsonFindBool(buf, settings_map[i].name, (bool *)(p_settings + settings_map[i].offset)));
+                TO_EXIT_IF_ERROR(json_parse_bool(val, (bool *)field));
                 break;
-            case STYPE_STRING:
-                LOG_IF_ERROR(jsonFindString(buf, settings_map[i].name, (char *)(p_settings + settings_map[i].offset),
-                                            settings_map[i].max_len));
-                break;
+            case STYPE_STRING: {
+                char str[PASS_MAX_LEN > SSID_MAX_LEN ? PASS_MAX_LEN : SSID_MAX_LEN];
+                TO_EXIT_IF_ERROR(json_parse_string(val, str, m->max_len));
+                if ((m->secret) && (str[0] == '\0')) {
+                    break; // keep current value
+                }
+                strcpy((char *)field, str);
+            } break;
             default:
-                LOG_IF_ERROR(ERR_FAIL);
+                TO_EXIT_IF_ERROR(ERR_FAIL);
                 break;
-        }
-        if (err != ERR_SUCCESS) {
-            INFO("Param %s not found", settings_map[i].name);
         }
     }
 
-    RETURN_IF_ERROR(settings_write());
+    TO_EXIT_IF_ERROR(settings_apply(&new_settings));
+    return err;
 
+EXIT:
+    INFO("Settings are not applied");
     return err;
 }

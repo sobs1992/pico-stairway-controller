@@ -23,10 +23,10 @@ typedef enum {
 
 #define INFO(...)                                                                                                      \
     do {                                                                                                               \
-        printf("[%08lld] ", get_time_ms());                                                                            \
+        printf("[%08llu] ", (unsigned long long)get_time_ms());                                                        \
         printf(__VA_ARGS__);                                                                                           \
         printf("\n");                                                                                                  \
-    } while (0);
+    } while (0)
 
 #define ANTISPAM_BEGIN(ms)                                                                                             \
     {                                                                                                                  \
@@ -42,61 +42,79 @@ typedef enum {
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
 
 #define RETURN_IF_ERROR(err_code)                                                                                      \
-    err = err_code;                                                                                                    \
-    if (err != ERR_SUCCESS) {                                                                                          \
-        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
-        return err;                                                                                                    \
-    }
+    do {                                                                                                               \
+        err = (err_code);                                                                                              \
+        if (err != ERR_SUCCESS) {                                                                                      \
+            INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                       \
+            return err;                                                                                                \
+        }                                                                                                              \
+    } while (0)
 
 #define RETURN_IF_ERROR_(err_code)                                                                                     \
-    err = err_code;                                                                                                    \
-    if (err != ERR_SUCCESS) {                                                                                          \
-        return err;                                                                                                    \
-    }
+    do {                                                                                                               \
+        err = (err_code);                                                                                              \
+        if (err != ERR_SUCCESS) {                                                                                      \
+            return err;                                                                                                \
+        }                                                                                                              \
+    } while (0)
 
 #define RETURN_IF_COND(cond, err_code)                                                                                 \
-    if (cond) {                                                                                                        \
-        err = err_code;                                                                                                \
+    do {                                                                                                               \
+        if (cond) {                                                                                                    \
+            err = (err_code);                                                                                          \
+            if (err != ERR_SUCCESS) {                                                                                  \
+                INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                   \
+            }                                                                                                          \
+            return err;                                                                                                \
+        }                                                                                                              \
+    } while (0)
+
+#define RETURN_IF_COND_(cond, err_code)                                                                                \
+    do {                                                                                                               \
+        if (cond) {                                                                                                    \
+            err = (err_code);                                                                                          \
+            return err;                                                                                                \
+        }                                                                                                              \
+    } while (0)
+
+#define TO_EXIT_IF_ERROR(err_code)                                                                                     \
+    do {                                                                                                               \
+        err = (err_code);                                                                                              \
+        if (err != ERR_SUCCESS) {                                                                                      \
+            INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                       \
+            goto EXIT;                                                                                                 \
+        }                                                                                                              \
+    } while (0)
+
+#define TO_EXIT_IF_ERROR_(err_code)                                                                                    \
+    do {                                                                                                               \
+        err = (err_code);                                                                                              \
+        if (err != ERR_SUCCESS) {                                                                                      \
+            goto EXIT;                                                                                                 \
+        }                                                                                                              \
+    } while (0)
+
+#define TO_EXIT_IF_COND(cond, err_code)                                                                                \
+    do {                                                                                                               \
+        if (cond) {                                                                                                    \
+            err = (err_code);                                                                                          \
+            INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                       \
+            goto EXIT;                                                                                                 \
+        }                                                                                                              \
+    } while (0)
+
+#define TO_EXIT_IF_COND_(cond, err_code)                                                                               \
+    do {                                                                                                               \
+        if (cond) {                                                                                                    \
+            err = (err_code);                                                                                          \
+            goto EXIT;                                                                                                 \
+        }                                                                                                              \
+    } while (0)
+
+#define LOG_IF_ERROR(err_code)                                                                                         \
+    do {                                                                                                               \
+        err = (err_code);                                                                                              \
         if (err != ERR_SUCCESS) {                                                                                      \
             INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                       \
         }                                                                                                              \
-        return err;                                                                                                    \
-    }
-
-#define RETURN_IF_COND_(cond, err_code)                                                                                \
-    if (cond) {                                                                                                        \
-        err = err_code;                                                                                                \
-        return err;                                                                                                    \
-    }
-
-#define TO_EXIT_IF_ERROR(err_code)                                                                                     \
-    err = err_code;                                                                                                    \
-    if (err != ERR_SUCCESS) {                                                                                          \
-        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
-        goto EXIT;                                                                                                     \
-    }
-
-#define TO_EXIT_IF_ERROR_(err_code)                                                                                    \
-    err = err_code;                                                                                                    \
-    if (err != ERR_SUCCESS) {                                                                                          \
-        goto EXIT;                                                                                                     \
-    }
-
-#define TO_EXIT_IF_COND(cond, err_code)                                                                                \
-    if (cond) {                                                                                                        \
-        err = err_code;                                                                                                \
-        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
-        goto EXIT;                                                                                                     \
-    }
-
-#define TO_EXIT_IF_COND_(cond, err_code)                                                                               \
-    if (cond) {                                                                                                        \
-        err = err_code;                                                                                                \
-        goto EXIT;                                                                                                     \
-    }
-
-#define LOG_IF_ERROR(err_code)                                                                                         \
-    err = err_code;                                                                                                    \
-    if (err != ERR_SUCCESS) {                                                                                          \
-        INFO("%s %d ErrCode: 0x%x", FILE_ID, __LINE__, err);                                                           \
-    }
+    } while (0)

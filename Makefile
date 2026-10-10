@@ -16,26 +16,29 @@ ASSETS_GEN_PATH=network/http_server/generated
 ASSETS_SRC_FILES := $(shell find $(ASSETS_PATH) -type f)
 ASSETS_DST_FILES := $(patsubst $(ASSETS_PATH)/%, $(ASSETS_GEN_PATH)/%.h, $(ASSETS_SRC_FILES))
 
+.PHONY: all assets prepare build clean flash run
+
 all: build
 
-assets:
-	@find $(ASSETS_PATH) -type f | while read f; do \
-		out="$(ASSETS_GEN_PATH)/$${f#$(ASSETS_PATH)/}.h"; \
-		mkdir -p "$$(dirname $$out)"; \
-		html-minifier-terser \
-			--collapse-whitespace \
-			--remove-comments \
-			--minify-css true \
-			--minify-js true \
-			"$$f" | \
-		hexdump -v -e '1/1 "0x%02X, " "\n"' > "$$out"; \
-	done
+assets: $(ASSETS_DST_FILES)
+
+# Regenerate an asset header only when its source changes
+$(ASSETS_GEN_PATH)/%.h: $(ASSETS_PATH)/%
+	@mkdir -p "$(dir $@)"
+	html-minifier-terser \
+		--collapse-whitespace \
+		--remove-comments \
+		--minify-css true \
+		--minify-js true \
+		"$<" > "$@.min"
+	hexdump -v -e '1/1 "0x%02X, " "\n"' "$@.min" > "$@"
+	@rm -f "$@.min"
 
 prepare: assets
 	cmake -S . -B $(BUILD_DIR) -DPICO_BOARD=$(BOARD) $(TOOLS_PATHS)
 
 build: prepare
-	cmake --build $(BUILD_DIR) --target $(TARGET) -j12
+	cmake --build $(BUILD_DIR) --target $(TARGET) -j$(shell nproc)
 
 clean:
 	rm -rf $(BUILD_DIR)
